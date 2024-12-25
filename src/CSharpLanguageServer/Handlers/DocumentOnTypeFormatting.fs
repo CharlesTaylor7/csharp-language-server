@@ -36,8 +36,8 @@ module DocumentOnTypeFormatting =
             let registerOptions: DocumentOnTypeFormattingRegistrationOptions =
                 { FirstTriggerCharacter = ";"
                   MoreTriggerCharacter = Some([| "}"; ")" |])
-                  DocumentSelector = Some defaultDocumentSelector
-                }
+                  DocumentSelector = Some defaultDocumentSelector }
+
             Some
                 { Id = Guid.NewGuid().ToString()
                   Method = "textDocument/onTypeFormatting"
@@ -57,12 +57,19 @@ module DocumentOnTypeFormatting =
             | "}"
             | ")" ->
                 let! root = doc.GetSyntaxRootAsync(ct) |> Async.AwaitTask
+
                 match FormatUtil.findFormatTarget root pos with
                 | None -> return None |> success
                 | Some node ->
                     let! newDoc =
-                        Formatter.FormatAsync(doc, TextSpan.FromBounds(node.FullSpan.Start, node.FullSpan.End), options, cancellationToken=ct)
+                        Formatter.FormatAsync(
+                            doc,
+                            TextSpan.FromBounds(node.FullSpan.Start, node.FullSpan.End),
+                            options,
+                            cancellationToken = ct
+                        )
                         |> Async.AwaitTask
+
                     let! textEdits = FormatUtil.getChanges newDoc doc
                     return textEdits |> Some |> success
             | _ -> return None |> success

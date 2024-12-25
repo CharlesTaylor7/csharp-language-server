@@ -23,13 +23,13 @@ module Workspace =
         |> Option.bind (fun x -> x.DynamicRegistration)
         |> Option.defaultValue false
 
-    let registration (clientCapabilities: ClientCapabilities): Registration option =
+    let registration (clientCapabilities: ClientCapabilities) : Registration option =
         match dynamicRegistration clientCapabilities with
         | false -> None
         | true ->
             let fileSystemWatcher =
                 { GlobPattern = U2.C1 "**/*.{cs,csproj,sln}"
-                  Kind = Some (WatchKind.Create ||| WatchKind.Change ||| WatchKind.Delete) }
+                  Kind = Some(WatchKind.Create ||| WatchKind.Change ||| WatchKind.Delete) }
 
             let registerOptions: DidChangeWatchedFilesRegistrationOptions =
                 { Watchers = [| fileSystemWatcher |] }
@@ -49,17 +49,15 @@ module Workspace =
 
         | None ->
             let docFilePathMaybe = uri |> Util.tryParseFileUri
+
             match docFilePathMaybe with
             | Some docFilePath ->
                 // ok, this document is not on solution, register a new one
                 let fileText = docFilePath |> File.ReadAllText
-                let! newDocMaybe = tryAddDocument logger
-                                                    docFilePath
-                                                    fileText
-                                                    context.Solution
+                let! newDocMaybe = tryAddDocument logger docFilePath fileText context.Solution
+
                 match newDocMaybe with
-                | Some newDoc ->
-                    context.Emit(SolutionChange newDoc.Project.Solution)
+                | Some newDoc -> context.Emit(SolutionChange newDoc.Project.Solution)
                 | None -> ()
             | None -> ()
     }
@@ -73,45 +71,49 @@ module Workspace =
             context.Emit(OpenDocRemove uri)
         | None -> ()
 
-    let didChangeWatchedFiles (context: ServerRequestContext)
-                              (p: DidChangeWatchedFilesParams)
-            : Async<LspResult<unit>> = async {
-        for change in p.Changes do
-            match Path.GetExtension(change.Uri) with
-            | ".csproj" ->
-                do! context.WindowShowMessage "change to .csproj detected, will reload solution"
-                context.Emit(SolutionReloadRequest (TimeSpan.FromSeconds(5)))
+    let didChangeWatchedFiles
+        (context: ServerRequestContext)
+        (p: DidChangeWatchedFilesParams)
+        : Async<LspResult<unit>> =
+        async {
+            for change in p.Changes do
+                match Path.GetExtension(change.Uri) with
+                | ".csproj" ->
+                    do! context.WindowShowMessage "change to .csproj detected, will reload solution"
+                    context.Emit(SolutionReloadRequest(TimeSpan.FromSeconds(5)))
 
-            | ".sln" ->
-                do! context.WindowShowMessage "change to .sln detected, will reload solution"
-                context.Emit(SolutionReloadRequest (TimeSpan.FromSeconds(5)))
+                | ".sln" ->
+                    do! context.WindowShowMessage "change to .sln detected, will reload solution"
+                    context.Emit(SolutionReloadRequest(TimeSpan.FromSeconds(5)))
 
-            | ".cs" ->
-                match change.Type with
-                | FileChangeType.Created ->
-                    do! tryReloadDocumentOnUri logger context change.Uri
-                | FileChangeType.Changed ->
-                    do! tryReloadDocumentOnUri logger context change.Uri
-                | FileChangeType.Deleted ->
-                    do removeDocument context change.Uri
+                | ".cs" ->
+                    match change.Type with
+                    | FileChangeType.Created -> do! tryReloadDocumentOnUri logger context change.Uri
+                    | FileChangeType.Changed -> do! tryReloadDocumentOnUri logger context change.Uri
+                    | FileChangeType.Deleted -> do removeDocument context change.Uri
+                    | _ -> ()
+
                 | _ -> ()
 
-            | _ -> ()
+            return Ok()
+        }
 
-        return Ok()
-    }
+    let didChangeConfiguration
+        (context: ServerRequestContext)
+        (configParams: DidChangeConfigurationParams)
+        : Async<LspResult<unit>> =
+        async {
+            let csharpSettings =
+                configParams.Settings
+                |> deserialize<ServerSettingsDto>
+                |> (fun x -> x.csharp)
+                |> Option.defaultValue ServerSettingsCSharpDto.Default
 
-    let didChangeConfiguration (context: ServerRequestContext)
-                               (configParams: DidChangeConfigurationParams)
-            : Async<LspResult<unit>> = async {
-        let csharpSettings =
-            configParams.Settings
-            |> deserialize<ServerSettingsDto>
-            |> (fun x -> x.csharp)
-            |> Option.defaultValue ServerSettingsCSharpDto.Default
+            let newServerSettings =
+                { context.State.Settings with
+                    SolutionPath = csharpSettings.solution }
 
-        let newServerSettings = { context.State.Settings with SolutionPath = csharpSettings.solution }
-        context.Emit(SettingsChange newServerSettings)
+            context.Emit(SettingsChange newServerSettings)
 
-        return Ok()
-    }
+            return Ok()
+        }

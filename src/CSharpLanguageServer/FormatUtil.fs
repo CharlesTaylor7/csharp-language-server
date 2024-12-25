@@ -75,8 +75,10 @@ module internal FormatUtil =
 
     let getFormattingOptions (doc: Document) (formattingOptions: FormattingOptions) : OptionSet =
         doc.Project.Solution.Options
-        |> fun o -> o.WithChangedOption(FormattingOptions.IndentationSize, LanguageNames.CSharp, int formattingOptions.TabSize)
-        |> fun o -> o.WithChangedOption(FormattingOptions.UseTabs, LanguageNames.CSharp, not formattingOptions.InsertSpaces)
+        |> fun o ->
+            o.WithChangedOption(FormattingOptions.IndentationSize, LanguageNames.CSharp, int formattingOptions.TabSize)
+        |> fun o ->
+            o.WithChangedOption(FormattingOptions.UseTabs, LanguageNames.CSharp, not formattingOptions.InsertSpaces)
         |> match formattingOptions.InsertFinalNewline with
            | Some insertFinalNewline ->
                fun o -> o.WithChangedOption(CSharpFormattingOptions.NewLineForFinally, insertFinalNewline)
@@ -94,6 +96,7 @@ module internal FormatUtil =
             | SyntaxKind.SemicolonToken -> token.Parent |> Some
             | SyntaxKind.CloseBraceToken ->
                 let parent = token.Parent
+
                 match parent.Kind() with
                 | SyntaxKind.Block -> parent.Parent |> Some
                 | _ -> parent |> Some

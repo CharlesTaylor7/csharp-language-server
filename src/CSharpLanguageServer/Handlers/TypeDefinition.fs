@@ -19,10 +19,12 @@ module TypeDefinition =
         |> Option.bind (fun x -> x.DynamicRegistration)
         |> Option.defaultValue false
 
-    let provider (clientCapabilities: ClientCapabilities) : U3<bool,TypeDefinitionOptions,TypeDefinitionRegistrationOptions> option =
+    let provider
+        (clientCapabilities: ClientCapabilities)
+        : U3<bool, TypeDefinitionOptions, TypeDefinitionRegistrationOptions> option =
         match dynamicRegistration clientCapabilities with
         | true -> None
-        | false -> Some (U3.C1 true)
+        | false -> Some(U3.C1 true)
 
     let registration (clientCapabilities: ClientCapabilities) : Registration option =
         match dynamicRegistration clientCapabilities with
@@ -32,30 +34,29 @@ module TypeDefinition =
                 { DocumentSelector = Some defaultDocumentSelector
                   Id = None
                   WorkDoneProgress = None }
-            Some {
-                Id = Guid.NewGuid().ToString()
-                Method = "textDocument/typeDefinition"
-                RegisterOptions = registerOptions |> serialize |> Some }
+
+            Some
+                { Id = Guid.NewGuid().ToString()
+                  Method = "textDocument/typeDefinition"
+                  RegisterOptions = registerOptions |> serialize |> Some }
 
     let handle (context: ServerRequestContext) (p: TextDocumentPositionParams) : AsyncLspResult<Declaration option> = async {
         match! context.FindSymbol' p.TextDocument.Uri p.Position with
         | None -> return None |> success
-        | Some (symbol, doc) ->
+        | Some(symbol, doc) ->
             let typeSymbol =
                 match symbol with
-                | :? ILocalSymbol as localSymbol -> [localSymbol.Type]
-                | :? IFieldSymbol as fieldSymbol -> [fieldSymbol.Type]
-                | :? IPropertySymbol as propertySymbol -> [propertySymbol.Type]
-                | :? IParameterSymbol as parameterSymbol -> [parameterSymbol.Type]
+                | :? ILocalSymbol as localSymbol -> [ localSymbol.Type ]
+                | :? IFieldSymbol as fieldSymbol -> [ fieldSymbol.Type ]
+                | :? IPropertySymbol as propertySymbol -> [ propertySymbol.Type ]
+                | :? IParameterSymbol as parameterSymbol -> [ parameterSymbol.Type ]
                 | _ -> []
+
             let! locations =
                 typeSymbol
                 |> Seq.map (flip context.ResolveSymbolLocations (Some doc.Project))
                 |> Async.Parallel
                 |> Async.map (Seq.collect id >> Seq.toArray)
-            return
-                locations
-                |> Declaration.C2
-                |> Some
-                |> success
+
+            return locations |> Declaration.C2 |> Some |> success
     }

@@ -20,7 +20,9 @@ module Diagnostic =
         |> Option.bind (fun x -> x.DynamicRegistration)
         |> Option.defaultValue false
 
-    let provider (clientCapabilities: ClientCapabilities): U2<DiagnosticOptions, DiagnosticRegistrationOptions> option =
+    let provider
+        (clientCapabilities: ClientCapabilities)
+        : U2<DiagnosticOptions, DiagnosticRegistrationOptions> option =
         match dynamicRegistration clientCapabilities with
         | true -> None
         | false ->
@@ -30,10 +32,9 @@ module Diagnostic =
                   Identifier = None
                   InterFileDependencies = false
                   WorkspaceDiagnostics = false
-                  Id = None
-                }
+                  Id = None }
 
-            Some (U2.C2 diagnosticOptions)
+            Some(U2.C2 diagnosticOptions)
 
     let registration (clientCapabilities: ClientCapabilities) : Registration option =
         match dynamicRegistration clientCapabilities with
@@ -52,33 +53,32 @@ module Diagnostic =
                   Method = "textDocument/diagnostic"
                   RegisterOptions = registerOptions |> serialize |> Some }
 
-    let handle (context: ServerRequestContext) (p: DocumentDiagnosticParams) : AsyncLspResult<DocumentDiagnosticReport> = async {
-        let emptyReport: RelatedFullDocumentDiagnosticReport =
-            {
-                Kind = "full"
-                ResultId = None
-                Items = [| |]
-                RelatedDocuments = None
-            }
+    let handle
+        (context: ServerRequestContext)
+        (p: DocumentDiagnosticParams)
+        : AsyncLspResult<DocumentDiagnosticReport> =
+        async {
+            let emptyReport: RelatedFullDocumentDiagnosticReport =
+                { Kind = "full"
+                  ResultId = None
+                  Items = [||]
+                  RelatedDocuments = None }
 
-        match context.GetDocument p.TextDocument.Uri with
-        | None ->
-            return emptyReport |> U2.C1 |> LspResult.success
+            match context.GetDocument p.TextDocument.Uri with
+            | None -> return emptyReport |> U2.C1 |> LspResult.success
 
-        | Some doc ->
-            let! ct = Async.CancellationToken
-            let! semanticModelMaybe = doc.GetSemanticModelAsync(ct) |> Async.AwaitTask
-            match semanticModelMaybe |> Option.ofObj with
-            | Some semanticModel ->
-                let diagnostics =
-                    semanticModel.GetDiagnostics()
-                    |> Seq.map Diagnostic.fromRoslynDiagnostic
-                    |> Array.ofSeq
+            | Some doc ->
+                let! ct = Async.CancellationToken
+                let! semanticModelMaybe = doc.GetSemanticModelAsync(ct) |> Async.AwaitTask
 
-                return { emptyReport with Items = diagnostics }
-                       |> U2.C1
-                       |> LspResult.success
+                match semanticModelMaybe |> Option.ofObj with
+                | Some semanticModel ->
+                    let diagnostics =
+                        semanticModel.GetDiagnostics()
+                        |> Seq.map Diagnostic.fromRoslynDiagnostic
+                        |> Array.ofSeq
 
-            | None ->
-                return emptyReport |> U2.C1 |> LspResult.success
-    }
+                    return { emptyReport with Items = diagnostics } |> U2.C1 |> LspResult.success
+
+                | None -> return emptyReport |> U2.C1 |> LspResult.success
+        }

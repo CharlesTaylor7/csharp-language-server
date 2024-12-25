@@ -24,7 +24,7 @@ module DocumentRangeFormatting =
     let provider (clientCapabilities: ClientCapabilities) : U2<bool, DocumentRangeFormattingOptions> option =
         match dynamicRegistration clientCapabilities with
         | true -> None
-        | false -> Some (U2.C1 true)
+        | false -> Some(U2.C1 true)
 
     let registration (clientCapabilities: ClientCapabilities) : Registration option =
         match dynamicRegistration clientCapabilities with
@@ -32,8 +32,7 @@ module DocumentRangeFormatting =
         | true ->
             let registerOptions: DocumentRangeFormattingRegistrationOptions =
                 { DocumentSelector = Some defaultDocumentSelector
-                  WorkDoneProgress = None
-                }
+                  WorkDoneProgress = None }
 
             Some
                 { Id = Guid.NewGuid().ToString()
@@ -51,9 +50,11 @@ module DocumentRangeFormatting =
             let endPos = Position.toRoslynPosition sourceText.Lines p.Range.End
             let! syntaxTree = doc.GetSyntaxRootAsync(ct) |> Async.AwaitTask
             let tokenStart = syntaxTree.FindToken(startPos).FullSpan.Start
+
             let! newDoc =
-                Formatter.FormatAsync(doc, TextSpan.FromBounds(tokenStart, endPos), options, cancellationToken=ct)
+                Formatter.FormatAsync(doc, TextSpan.FromBounds(tokenStart, endPos), options, cancellationToken = ct)
                 |> Async.AwaitTask
+
             let! textEdits = FormatUtil.getChanges newDoc doc
             return textEdits |> Some |> success
     }

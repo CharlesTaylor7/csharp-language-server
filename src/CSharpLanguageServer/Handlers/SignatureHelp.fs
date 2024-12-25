@@ -29,9 +29,9 @@ module SignatureInformation =
               Value = DocumentationUtil.markdownDocForSymbol m }
             |> U2.C2
 
-        { Label           = SymbolName.fromSymbol SymbolDisplayFormat.MinimallyQualifiedFormat m
-          Documentation   = Some documentation
-          Parameters      = Some parameters
+        { Label = SymbolName.fromSymbol SymbolDisplayFormat.MinimallyQualifiedFormat m
+          Documentation = Some documentation
+          Parameters = Some parameters
           ActiveParameter = None }
 
 [<RequireQualifiedAccess>]
@@ -80,13 +80,15 @@ module SignatureHelp =
                   RetriggerCharacters = None
                   WorkDoneProgress = None
                   DocumentSelector = Some defaultDocumentSelector }
+
             Some
                 { Id = Guid.NewGuid().ToString()
                   Method = "textDocument/signatureHelp"
                   RegisterOptions = registerOptions |> serialize |> Some }
 
-    let handle (context: ServerRequestContext) (p: SignatureHelpParams): AsyncLspResult<SignatureHelp option> = async {
+    let handle (context: ServerRequestContext) (p: SignatureHelpParams) : AsyncLspResult<SignatureHelp option> = async {
         let docMaybe = context.GetUserDocument p.TextDocument.Uri
+
         match docMaybe with
         | None -> return None |> success
         | Some doc ->
@@ -99,12 +101,16 @@ module SignatureHelp =
             let! syntaxTree = doc.GetSyntaxTreeAsync(ct) |> Async.AwaitTask
             let! root = syntaxTree.GetRootAsync(ct) |> Async.AwaitTask
 
-            let rec findInvocationContext (node: SyntaxNode): InvocationContext option =
+            let rec findInvocationContext (node: SyntaxNode) : InvocationContext option =
                 match node with
                 | :? InvocationExpressionSyntax as invocation when invocation.ArgumentList.Span.Contains(position) ->
-                    Some { Receiver      = invocation.Expression
-                           ArgumentTypes = invocation.ArgumentList.Arguments |> Seq.map (fun a -> semanticModel.GetTypeInfo(a.Expression)) |> List.ofSeq
-                           Separators    = invocation.ArgumentList.Arguments.GetSeparators() |> List.ofSeq }
+                    Some
+                        { Receiver = invocation.Expression
+                          ArgumentTypes =
+                            invocation.ArgumentList.Arguments
+                            |> Seq.map (fun a -> semanticModel.GetTypeInfo(a.Expression))
+                            |> List.ofSeq
+                          Separators = invocation.ArgumentList.Arguments.GetSeparators() |> List.ofSeq }
 
                 | :? BaseObjectCreationExpressionSyntax as objectCreation when
                     objectCreation.ArgumentList
@@ -112,9 +118,13 @@ module SignatureHelp =
                     |> Option.map (fun argList -> argList.Span.Contains(position))
                     |> Option.defaultValue false
                     ->
-                    Some { Receiver      = objectCreation
-                           ArgumentTypes = objectCreation.ArgumentList.Arguments |> Seq.map (fun a -> semanticModel.GetTypeInfo(a.Expression)) |> List.ofSeq
-                           Separators    = objectCreation.ArgumentList.Arguments.GetSeparators() |> List.ofSeq }
+                    Some
+                        { Receiver = objectCreation
+                          ArgumentTypes =
+                            objectCreation.ArgumentList.Arguments
+                            |> Seq.map (fun a -> semanticModel.GetTypeInfo(a.Expression))
+                            |> List.ofSeq
+                          Separators = objectCreation.ArgumentList.Arguments.GetSeparators() |> List.ofSeq }
 
                 | :? AttributeSyntax as attributeSyntax when
                     attributeSyntax.ArgumentList
@@ -122,9 +132,13 @@ module SignatureHelp =
                     |> Option.map (fun argList -> argList.Span.Contains(position))
                     |> Option.defaultValue false
                     ->
-                    Some { Receiver      = attributeSyntax
-                           ArgumentTypes = attributeSyntax.ArgumentList.Arguments |> Seq.map (fun a -> semanticModel.GetTypeInfo(a.Expression)) |> List.ofSeq
-                           Separators    = attributeSyntax.ArgumentList.Arguments.GetSeparators() |> List.ofSeq }
+                    Some
+                        { Receiver = attributeSyntax
+                          ArgumentTypes =
+                            attributeSyntax.ArgumentList.Arguments
+                            |> Seq.map (fun a -> semanticModel.GetTypeInfo(a.Expression))
+                            |> List.ofSeq
+                          Separators = attributeSyntax.ArgumentList.Arguments.GetSeparators() |> List.ofSeq }
 
                 | _ ->
                     node
@@ -151,7 +165,9 @@ module SignatureHelp =
 
                 let signatureHelpResult =
                     { Signatures = methodGroup |> Seq.map SignatureInformation.fromMethod |> Array.ofSeq
-                      ActiveSignature = matchingMethodMaybe |> Option.map (fun m -> List.findIndex ((=) m) methodGroup |> uint32)
+                      ActiveSignature =
+                        matchingMethodMaybe
+                        |> Option.map (fun m -> List.findIndex ((=) m) methodGroup |> uint32)
                       ActiveParameter = activeParameterMaybe }
 
                 return Some signatureHelpResult |> success

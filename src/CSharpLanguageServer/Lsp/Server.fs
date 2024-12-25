@@ -25,34 +25,36 @@ module LspUtils =
 
 open LspUtils
 
-type CSharpLspServer(
-        lspClient: CSharpLspClient,
-        settings: ServerSettings
-    ) =
+type CSharpLspServer(lspClient: CSharpLspClient, settings: ServerSettings) =
 
     let logger = LogProvider.getLoggerByName "Server"
 
-    let stateActor = MailboxProcessor.Start(
-        serverEventLoop
-            { emptyServerState with Settings = settings })
+    let stateActor =
+        MailboxProcessor.Start(
+            serverEventLoop
+                { emptyServerState with
+                    Settings = settings }
+        )
 
     let getDocumentForUriFromCurrentState docType uri =
-        stateActor.PostAndAsyncReply(fun rc -> GetDocumentOfTypeForUri (docType, uri, rc))
+        stateActor.PostAndAsyncReply(fun rc -> GetDocumentOfTypeForUri(docType, uri, rc))
 
     let mutable timer: System.Threading.Timer option = None
 
     let setupTimer () =
-        timer <- Some (new System.Threading.Timer(
-            System.Threading.TimerCallback(
-                fun _ -> do stateActor.Post(PeriodicTimerTick)),
-            null, dueTime=100, period=250))
+        timer <-
+            Some(
+                new System.Threading.Timer(
+                    System.Threading.TimerCallback(fun _ -> do stateActor.Post(PeriodicTimerTick)),
+                    null,
+                    dueTime = 100,
+                    period = 250
+                )
+            )
 
     let mutable workspaceFolders: WorkspaceFolder list = []
 
-    let withContext
-            requestType
-            (handlerFn: ServerRequestContext -> 'a -> Async<LspResult<'b>>)
-            param =
+    let withContext requestType (handlerFn: ServerRequestContext -> 'a -> Async<LspResult<'b>>) param =
         let requestName = handlerFn.ToString()
 
         // we want to be careful and lock solution for change immediately w/o entering async/returing an `async` workflow
@@ -60,7 +62,9 @@ type CSharpLspServer(
         // StreamJsonRpc lib we're using in Ionide.LanguageServerProtocol guarantees that it will not call another
         // handler until previous one returns a Task (in our case -- F# `async` object.)
 
-        let startRequest rc = StartRequest (requestName, requestType, 0, rc)
+        let startRequest rc =
+            StartRequest(requestName, requestType, 0, rc)
+
         let requestId, semaphore = stateActor.PostAndReply(startRequest)
 
         let stateAcquisitionAndHandlerInvocation = async {
@@ -73,19 +77,18 @@ type CSharpLspServer(
             return! handlerFn context param
         }
 
-        let wrapExceptionAsLspResult op =
-            async {
-                let! resultOrExn = op |> Async.Catch
+        let wrapExceptionAsLspResult op = async {
+            let! resultOrExn = op |> Async.Catch
 
-                return
-                    match resultOrExn with
-                    | Choice1Of2 result -> result
-                    | Choice2Of2 exn ->
-                        match exn with
-                        | :? TaskCanceledException -> LspResult.requestCancelled
-                        | :? OperationCanceledException -> LspResult.requestCancelled
-                        | _ -> LspResult.internalError (string exn)
-            }
+            return
+                match resultOrExn with
+                | Choice1Of2 result -> result
+                | Choice2Of2 exn ->
+                    match exn with
+                    | :? TaskCanceledException -> LspResult.requestCancelled
+                    | :? OperationCanceledException -> LspResult.requestCancelled
+                    | _ -> LspResult.internalError (string exn)
+        }
 
         stateAcquisitionAndHandlerInvocation
         |> wrapExceptionAsLspResult
@@ -99,7 +102,7 @@ type CSharpLspServer(
         return ()
     }
 
-    let getRegistrations (clientCapabilities: ClientCapabilities): Registration list =
+    let getRegistrations (clientCapabilities: ClientCapabilities) : Registration list =
         let registrationBuilders =
             [ CallHierarchy.registration
               CodeAction.registration
@@ -138,87 +141,84 @@ type CSharpLspServer(
               TypeHierarchy.registration
               Workspace.registration
               WorkspaceSymbol.registration ]
+
         registrationBuilders
         |> List.map ((|>) clientCapabilities)
         |> List.filter (Option.isSome)
         |> List.map (Option.get)
 
-    let getServerCapabilities
-        (lspClient: InitializeParams) =
-                { ServerCapabilities.Default with
-                    TextDocumentSync = TextDocumentSync.provider lspClient.Capabilities |> Option.map U2.C1
-                    CompletionProvider = Completion.provider lspClient.Capabilities
-                    HoverProvider = Hover.provider lspClient.Capabilities
-                    SignatureHelpProvider = SignatureHelp.provider lspClient.Capabilities
-                    // DeclarationProvider = Declaration.provider lspClient.Capabilities
-                    DefinitionProvider = Definition.provider lspClient.Capabilities
-                    TypeDefinitionProvider = TypeDefinition.provider lspClient.Capabilities
-                    ImplementationProvider = Implementation.provider lspClient.Capabilities
-                    ReferencesProvider = References.provider lspClient.Capabilities
-                    DocumentHighlightProvider = DocumentHighlight.provider lspClient.Capabilities
-                    DocumentSymbolProvider = DocumentSymbol.provider lspClient.Capabilities
-                    CodeActionProvider = CodeAction.provider lspClient.Capabilities
-                    CodeLensProvider = CodeLens.provider lspClient.Capabilities
-                    // DocumentLinkProvider = DocumentLink.provider lspClient.Capabilities
-                    // ColorProvider = Color.provider lspClient.Capabilities
-                    DocumentFormattingProvider = DocumentFormatting.provider lspClient.Capabilities
-                    DocumentRangeFormattingProvider = DocumentRangeFormatting.provider lspClient.Capabilities
-                    DocumentOnTypeFormattingProvider = DocumentOnTypeFormatting.provider lspClient.Capabilities
-                    RenameProvider = Rename.provider lspClient.Capabilities
-                    // FoldingRangeProvider = FoldingRange.provider lspClient.Capabilities
-                    ExecuteCommandProvider = ExecuteCommand.provider lspClient.Capabilities
-                    // SelectionRangeProvider = SelectionRange.provider lspClient.Capabilities
-                    // LinkedEditingRangeProvider = LinkedEditingRange.provider lspClient.Capabilities
-                    CallHierarchyProvider = CallHierarchy.provider lspClient.Capabilities
-                    SemanticTokensProvider = SemanticTokens.provider lspClient.Capabilities
-                    // MonikerProvider = Moniker.provider lspClient.Capabilities
-                    TypeHierarchyProvider = TypeHierarchy.provider lspClient.Capabilities
-                    // InlineValueProvider = InlineValue.provider lspClient.Capabilities
-                    InlayHintProvider = InlayHint.provider lspClient.Capabilities
-                    DiagnosticProvider = Diagnostic.provider lspClient.Capabilities
-                    WorkspaceSymbolProvider = WorkspaceSymbol.provider lspClient.Capabilities }
+    let getServerCapabilities (lspClient: InitializeParams) =
+        { ServerCapabilities.Default with
+            TextDocumentSync = TextDocumentSync.provider lspClient.Capabilities |> Option.map U2.C1
+            CompletionProvider = Completion.provider lspClient.Capabilities
+            HoverProvider = Hover.provider lspClient.Capabilities
+            SignatureHelpProvider = SignatureHelp.provider lspClient.Capabilities
+            // DeclarationProvider = Declaration.provider lspClient.Capabilities
+            DefinitionProvider = Definition.provider lspClient.Capabilities
+            TypeDefinitionProvider = TypeDefinition.provider lspClient.Capabilities
+            ImplementationProvider = Implementation.provider lspClient.Capabilities
+            ReferencesProvider = References.provider lspClient.Capabilities
+            DocumentHighlightProvider = DocumentHighlight.provider lspClient.Capabilities
+            DocumentSymbolProvider = DocumentSymbol.provider lspClient.Capabilities
+            CodeActionProvider = CodeAction.provider lspClient.Capabilities
+            CodeLensProvider = CodeLens.provider lspClient.Capabilities
+            // DocumentLinkProvider = DocumentLink.provider lspClient.Capabilities
+            // ColorProvider = Color.provider lspClient.Capabilities
+            DocumentFormattingProvider = DocumentFormatting.provider lspClient.Capabilities
+            DocumentRangeFormattingProvider = DocumentRangeFormatting.provider lspClient.Capabilities
+            DocumentOnTypeFormattingProvider = DocumentOnTypeFormatting.provider lspClient.Capabilities
+            RenameProvider = Rename.provider lspClient.Capabilities
+            // FoldingRangeProvider = FoldingRange.provider lspClient.Capabilities
+            ExecuteCommandProvider = ExecuteCommand.provider lspClient.Capabilities
+            // SelectionRangeProvider = SelectionRange.provider lspClient.Capabilities
+            // LinkedEditingRangeProvider = LinkedEditingRange.provider lspClient.Capabilities
+            CallHierarchyProvider = CallHierarchy.provider lspClient.Capabilities
+            SemanticTokensProvider = SemanticTokens.provider lspClient.Capabilities
+            // MonikerProvider = Moniker.provider lspClient.Capabilities
+            TypeHierarchyProvider = TypeHierarchy.provider lspClient.Capabilities
+            // InlineValueProvider = InlineValue.provider lspClient.Capabilities
+            InlayHintProvider = InlayHint.provider lspClient.Capabilities
+            DiagnosticProvider = Diagnostic.provider lspClient.Capabilities
+            WorkspaceSymbolProvider = WorkspaceSymbol.provider lspClient.Capabilities }
 
     interface ICSharpLspServer with
         override __.Dispose() = ()
 
         override __.Initialize(p) =
             let serverCapabilities = getServerCapabilities p
-            p |> withReadWriteContext (Initialization.handleInitialize lspClient setupTimer serverCapabilities)
+
+            p
+            |> withReadWriteContext (Initialization.handleInitialize lspClient setupTimer serverCapabilities)
 
         override __.Initialized() =
-            () |> withReadWriteContext (Initialization.handleInitialized lspClient stateActor getRegistrations)
-               |> ignoreResult
+            ()
+            |> withReadWriteContext (Initialization.handleInitialized lspClient stateActor getRegistrations)
+            |> ignoreResult
 
         override __.Shutdown() =
             () |> withReadWriteContext Initialization.handleShutdown |> ignoreResult
 
         override __.Exit() = ignoreNotification
 
-        override this.TextDocumentHover(p) =
-            p |> withReadOnlyContext Hover.handle
+        override this.TextDocumentHover(p) = p |> withReadOnlyContext Hover.handle
 
         override this.TextDocumentDidOpen(p) =
-            p |> withReadOnlyContext (TextDocumentSync.didOpen)
-              |> ignoreResult
+            p |> withReadOnlyContext (TextDocumentSync.didOpen) |> ignoreResult
 
         override this.TextDocumentDidChange(p) =
-            p |> withReadWriteContext (TextDocumentSync.didChange)
-              |> ignoreResult
+            p |> withReadWriteContext (TextDocumentSync.didChange) |> ignoreResult
 
         override this.TextDocumentDidClose(p) =
-            p |> withReadWriteContext (TextDocumentSync.didClose)
-              |> ignoreResult
+            p |> withReadWriteContext (TextDocumentSync.didClose) |> ignoreResult
 
         override this.TextDocumentWillSave(p) =
-            p |> withReadWriteContext TextDocumentSync.willSave
-              |> ignoreResult
+            p |> withReadWriteContext TextDocumentSync.willSave |> ignoreResult
 
         override this.TextDocumentWillSaveWaitUntil(p) =
             p |> withReadWriteContext TextDocumentSync.willSaveWaitUntil
 
         override this.TextDocumentDidSave(p) =
-            p |> withReadWriteContext (TextDocumentSync.didSave)
-              |> ignoreResult
+            p |> withReadWriteContext (TextDocumentSync.didSave) |> ignoreResult
 
         override this.TextDocumentCompletion(p) =
             p |> withReadOnlyContext Completion.handle
@@ -226,11 +226,9 @@ type CSharpLspServer(
         override this.CompletionItemResolve(p) =
             p |> withReadOnlyContext Completion.resolve
 
-        override this.TextDocumentPrepareRename(p) =
-            p |> withReadOnlyContext Rename.prepare
+        override this.TextDocumentPrepareRename(p) = p |> withReadOnlyContext Rename.prepare
 
-        override this.TextDocumentRename(p) =
-            p |> withReadOnlyContext Rename.handle
+        override this.TextDocumentRename(p) = p |> withReadOnlyContext Rename.handle
 
         override this.TextDocumentDefinition(p) =
             p |> withReadOnlyContext Definition.handle
@@ -268,11 +266,9 @@ type CSharpLspServer(
         override this.TextDocumentSignatureHelp(p) =
             p |> withReadOnlyContext SignatureHelp.handle
 
-        override this.TextDocumentDocumentColor(p) =
-            p |> withReadOnlyContext Color.handle
+        override this.TextDocumentDocumentColor(p) = p |> withReadOnlyContext Color.handle
 
-        override this.TextDocumentColorPresentation(p) =
-            p |> withReadOnlyContext Color.present
+        override this.TextDocumentColorPresentation(p) = p |> withReadOnlyContext Color.present
 
         override this.TextDocumentFormatting(p) =
             p |> withReadOnlyContext DocumentFormatting.handle
@@ -287,14 +283,12 @@ type CSharpLspServer(
             p |> withReadOnlyContext DocumentSymbol.handle
 
         override __.WorkspaceDidChangeWatchedFiles(p) =
-            p |> withReadWriteContext Workspace.didChangeWatchedFiles
-              |> ignoreResult
+            p |> withReadWriteContext Workspace.didChangeWatchedFiles |> ignoreResult
 
         override __.WorkspaceDidChangeWorkspaceFolders(_p) = ignoreNotification
 
         override __.WorkspaceDidChangeConfiguration(p) =
-            p |> withReadWriteContext Workspace.didChangeConfiguration
-              |> ignoreResult
+            p |> withReadWriteContext Workspace.didChangeConfiguration |> ignoreResult
 
         override __.WorkspaceWillCreateFiles(p) = notImplemented
 
@@ -371,8 +365,7 @@ type CSharpLspServer(
         override this.TextDocumentLinkedEditingRange(p) =
             p |> withReadOnlyContext LinkedEditingRange.handle
 
-        override this.TextDocumentMoniker(p) =
-            p |> withReadOnlyContext Moniker.handle
+        override this.TextDocumentMoniker(p) = p |> withReadOnlyContext Moniker.handle
 
         override this.CSharpMetadata(p) =
             p |> withReadOnlyContext CSharpMetadata.handle
@@ -426,13 +419,7 @@ module Server =
 
         let clientCreator = CSharpLspClient
 
-        Ionide.LanguageServerProtocol.Server.start
-            requestHandlings
-            input
-            output
-            clientCreator
-            serverCreator
-            createRpc
+        Ionide.LanguageServerProtocol.Server.start requestHandlings input output clientCreator serverCreator createRpc
 
     let start options =
         try
@@ -444,4 +431,5 @@ module Server =
                 >> Log.addContext "name" (Process.GetCurrentProcess().ProcessName)
                 >> Log.addException ex
             )
+
             3

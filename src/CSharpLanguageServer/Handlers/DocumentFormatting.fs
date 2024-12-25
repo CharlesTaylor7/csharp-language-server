@@ -22,7 +22,7 @@ module DocumentFormatting =
     let provider (clientCapabilities: ClientCapabilities) : U2<bool, DocumentFormattingOptions> option =
         match dynamicRegistration clientCapabilities with
         | true -> None
-        | false -> Some (U2.C1 true)
+        | false -> Some(U2.C1 true)
 
     let registration (clientCapabilities: ClientCapabilities) : Registration option =
         match dynamicRegistration clientCapabilities with
@@ -31,18 +31,19 @@ module DocumentFormatting =
             let registerOptions: DocumentFormattingRegistrationOptions =
                 { DocumentSelector = Some defaultDocumentSelector
                   WorkDoneProgress = None }
+
             Some
                 { Id = Guid.NewGuid().ToString()
                   Method = "textDocument/formatting"
                   RegisterOptions = registerOptions |> serialize |> Some }
 
-    let handle (context: ServerRequestContext) (p: DocumentFormattingParams) : AsyncLspResult<TextEdit [] option> = async {
+    let handle (context: ServerRequestContext) (p: DocumentFormattingParams) : AsyncLspResult<TextEdit[] option> = async {
         match context.GetUserDocument p.TextDocument.Uri with
         | None -> return None |> success
         | Some doc ->
             let! ct = Async.CancellationToken
             let options = FormatUtil.getFormattingOptions doc p.Options
-            let! newDoc = Formatter.FormatAsync(doc, options, cancellationToken=ct) |> Async.AwaitTask
+            let! newDoc = Formatter.FormatAsync(doc, options, cancellationToken = ct) |> Async.AwaitTask
             let! textEdits = FormatUtil.getChanges newDoc doc
             return textEdits |> Some |> success
     }

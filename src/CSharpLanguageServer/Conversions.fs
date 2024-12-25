@@ -17,18 +17,20 @@ module Uri =
     /// "#/ProjDir" is Fragment instead of part of LocalPath.
     let unescape (uri: string) = uri.Replace("%3a", ":", true, null)
 
-    let toPath (uri: string) = Uri.UnescapeDataString(Uri(unescape(uri)).LocalPath)
+    let toPath (uri: string) =
+        Uri.UnescapeDataString(Uri(unescape (uri)).LocalPath)
 
     let fromPath (path: string) =
         let metadataPrefix = "$metadata$/"
+
         if path.StartsWith(metadataPrefix) then
             "csharp:/metadata/" + path.Substring(metadataPrefix.Length)
         else
             Uri(path).ToString()
 
-    let toWorkspaceFolder(uri: string): WorkspaceFolder =
+    let toWorkspaceFolder (uri: string) : WorkspaceFolder =
         { Uri = uri
-          Name = Uri.UnescapeDataString(Uri(unescape(uri)).Segments |> Array.last) }
+          Name = Uri.UnescapeDataString(Uri(unescape (uri)).Segments |> Array.last) }
 
 
 module Path =
@@ -40,36 +42,38 @@ module Path =
 
 
 module Position =
-    let fromLinePosition (pos: LinePosition): Position =
-        { Line = uint32 pos.Line ; Character = uint32 pos.Character }
+    let fromLinePosition (pos: LinePosition) : Position =
+        { Line = uint32 pos.Line
+          Character = uint32 pos.Character }
 
-    let toLinePosition (lines: TextLineCollection) (pos: Position): LinePosition =
+    let toLinePosition (lines: TextLineCollection) (pos: Position) : LinePosition =
         if (int pos.Line) >= lines.Count then
             LinePosition(lines.Count - 1, lines[lines.Count - 1].EndIncludingLineBreak - lines[lines.Count - 1].Start)
         else
             LinePosition(int pos.Line, int pos.Character)
 
-    let toRoslynPosition (lines: TextLineCollection) = toLinePosition lines >> lines.GetPosition
+    let toRoslynPosition (lines: TextLineCollection) =
+        toLinePosition lines >> lines.GetPosition
 
 
 module Range =
-    let toLinePositionSpan (lines: TextLineCollection) (range: Range): LinePositionSpan =
-        LinePositionSpan(
-            Position.toLinePosition lines range.Start,
-            Position.toLinePosition lines range.End)
+    let toLinePositionSpan (lines: TextLineCollection) (range: Range) : LinePositionSpan =
+        LinePositionSpan(Position.toLinePosition lines range.Start, Position.toLinePosition lines range.End)
 
-    let fromLinePositionSpan (pos: LinePositionSpan): Range =
+    let fromLinePositionSpan (pos: LinePositionSpan) : Range =
         { Start = Position.fromLinePosition pos.Start
           End = Position.fromLinePosition pos.End }
 
-    let toTextSpan (lines: TextLineCollection) = toLinePositionSpan lines >> lines.GetTextSpan
+    let toTextSpan (lines: TextLineCollection) =
+        toLinePositionSpan lines >> lines.GetTextSpan
 
-    let fromTextSpan (lines: TextLineCollection) = lines.GetLinePositionSpan >> fromLinePositionSpan
+    let fromTextSpan (lines: TextLineCollection) =
+        lines.GetLinePositionSpan >> fromLinePositionSpan
 
 
 module Location =
-    let fromRoslynLocation (loc: Microsoft.CodeAnalysis.Location): option<Location> =
-        let toLspLocation (path: string) span: Location =
+    let fromRoslynLocation (loc: Microsoft.CodeAnalysis.Location) : option<Location> =
+        let toLspLocation (path: string) span : Location =
             { Uri = path |> Path.toUri
               Range = span |> Range.fromLinePositionSpan }
 
@@ -78,11 +82,9 @@ module Location =
             let mappedLoc = loc.GetMappedLineSpan()
 
             if mappedLoc.IsValid && File.Exists(mappedLoc.Path) then
-                toLspLocation mappedLoc.Path mappedLoc.Span
-                |> Some
+                toLspLocation mappedLoc.Path mappedLoc.Span |> Some
             elif File.Exists(loc.SourceTree.FilePath) then
-                toLspLocation loc.SourceTree.FilePath (loc.GetLineSpan().Span)
-                |> Some
+                toLspLocation loc.SourceTree.FilePath (loc.GetLineSpan().Span) |> Some
             else
                 None
 
@@ -90,17 +92,21 @@ module Location =
 
 
 module TextEdit =
-    let fromTextChange (lines: TextLineCollection) (changes: TextChange): TextEdit =
+    let fromTextChange (lines: TextLineCollection) (changes: TextChange) : TextEdit =
         { Range = changes.Span |> Range.fromTextSpan lines
           NewText = changes.NewText }
 
 
 module SymbolKind =
-    let fromSymbol (symbol: ISymbol): SymbolKind =
+    let fromSymbol (symbol: ISymbol) : SymbolKind =
         match symbol with
         | :? ILocalSymbol -> SymbolKind.Variable
         | :? IFieldSymbol as fs ->
-            if not(isNull fs.ContainingType) && fs.ContainingType.TypeKind = TypeKind.Enum && fs.HasConstantValue then
+            if
+                not (isNull fs.ContainingType)
+                && fs.ContainingType.TypeKind = TypeKind.Enum
+                && fs.HasConstantValue
+            then
                 SymbolKind.EnumMember
             else
                 SymbolKind.Field
@@ -129,7 +135,7 @@ module SymbolKind =
 
 
 module SymbolName =
-    let fromSymbol (format: SymbolDisplayFormat) (symbol: ISymbol): string = symbol.ToDisplayString(format)
+    let fromSymbol (format: SymbolDisplayFormat) (symbol: ISymbol) : string = symbol.ToDisplayString(format)
 
 
 module CallHierarchyItem =
@@ -147,7 +153,7 @@ module CallHierarchyItem =
             miscellaneousOptions = SymbolDisplayMiscellaneousOptions.UseSpecialTypes
         )
 
-    let fromSymbolAndLocation (symbol: ISymbol) (location: Location): CallHierarchyItem =
+    let fromSymbolAndLocation (symbol: ISymbol) (location: Location) : CallHierarchyItem =
         let kind = SymbolKind.fromSymbol symbol
         let containingType = (symbol.ContainingType :> ISymbol) |> Option.ofObj
         let containingNamespace = (symbol.ContainingNamespace :> ISymbol) |> Option.ofObj
@@ -164,7 +170,10 @@ module CallHierarchyItem =
           SelectionRange = location.Range
           Data = None }
 
-    let fromSymbol (wmResolveSymbolLocations: ISymbol -> Project option -> Async<list<Location>>) (symbol: ISymbol): Async<CallHierarchyItem list> =
+    let fromSymbol
+        (wmResolveSymbolLocations: ISymbol -> Project option -> Async<list<Location>>)
+        (symbol: ISymbol)
+        : Async<CallHierarchyItem list> =
         wmResolveSymbolLocations symbol None
         |> Async.map (List.map (fromSymbolAndLocation symbol))
 
@@ -183,7 +192,7 @@ module TypeHierarchyItem =
             miscellaneousOptions = SymbolDisplayMiscellaneousOptions.UseSpecialTypes
         )
 
-    let fromSymbolAndLocation (symbol: ISymbol) (location: Location): TypeHierarchyItem =
+    let fromSymbolAndLocation (symbol: ISymbol) (location: Location) : TypeHierarchyItem =
         let kind = SymbolKind.fromSymbol symbol
         let containingType = (symbol.ContainingType :> ISymbol) |> Option.ofObj
         let containingNamespace = (symbol.ContainingNamespace :> ISymbol) |> Option.ofObj
@@ -200,12 +209,15 @@ module TypeHierarchyItem =
           SelectionRange = location.Range
           Data = None }
 
-    let fromSymbol (wmResolveSymbolLocations: ISymbol -> Project option -> Async<list<Location>>) (symbol: ISymbol): Async<TypeHierarchyItem list> =
+    let fromSymbol
+        (wmResolveSymbolLocations: ISymbol -> Project option -> Async<list<Location>>)
+        (symbol: ISymbol)
+        : Async<TypeHierarchyItem list> =
         wmResolveSymbolLocations symbol None
         |> Async.map (List.map (fromSymbolAndLocation symbol))
 
 module SymbolInformation =
-    let fromSymbol (format: SymbolDisplayFormat) (symbol: ISymbol): SymbolInformation list =
+    let fromSymbol (format: SymbolDisplayFormat) (symbol: ISymbol) : SymbolInformation list =
         let toSymbolInformation loc =
             { Name = SymbolName.fromSymbol format symbol
               Kind = SymbolKind.fromSymbol symbol
@@ -223,7 +235,7 @@ module SymbolInformation =
 
 
 module DiagnosticSeverity =
-    let fromRoslynDiagnosticSeverity (sev: Microsoft.CodeAnalysis.DiagnosticSeverity): DiagnosticSeverity =
+    let fromRoslynDiagnosticSeverity (sev: Microsoft.CodeAnalysis.DiagnosticSeverity) : DiagnosticSeverity =
         match sev with
         | Microsoft.CodeAnalysis.DiagnosticSeverity.Info -> DiagnosticSeverity.Information
         | Microsoft.CodeAnalysis.DiagnosticSeverity.Warning -> DiagnosticSeverity.Warning
@@ -232,13 +244,14 @@ module DiagnosticSeverity =
 
 
 module Diagnostic =
-    let fromRoslynDiagnostic (diagnostic: Microsoft.CodeAnalysis.Diagnostic): Diagnostic =
+    let fromRoslynDiagnostic (diagnostic: Microsoft.CodeAnalysis.Diagnostic) : Diagnostic =
         let diagnosticCodeUrl =
             diagnostic.Id.ToLowerInvariant()
             |> sprintf "https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/compiler-messages/%s"
+
         { Range = diagnostic.Location.GetLineSpan().Span |> Range.fromLinePositionSpan
-          Severity = Some (diagnostic.Severity |> DiagnosticSeverity.fromRoslynDiagnosticSeverity)
-          Code = Some (U2.C2 diagnostic.Id)
+          Severity = Some(diagnostic.Severity |> DiagnosticSeverity.fromRoslynDiagnosticSeverity)
+          Code = Some(U2.C2 diagnostic.Id)
           CodeDescription = Some { Href = diagnosticCodeUrl |> URI }
           Source = Some "lsp"
           Message = diagnostic.GetMessage()
@@ -249,13 +262,12 @@ module Diagnostic =
 
 
 module CompletionContext =
-    let toCompletionTrigger (context: CompletionContext option): Completion.CompletionTrigger =
+    let toCompletionTrigger (context: CompletionContext option) : Completion.CompletionTrigger =
         context
         |> Option.bind (fun ctx ->
             match ctx.TriggerKind with
             | CompletionTriggerKind.Invoked
-            | CompletionTriggerKind.TriggerForIncompleteCompletions ->
-                Some Completion.CompletionTrigger.Invoke
+            | CompletionTriggerKind.TriggerForIncompleteCompletions -> Some Completion.CompletionTrigger.Invoke
             | CompletionTriggerKind.TriggerCharacter ->
                 ctx.TriggerCharacter
                 |> Option.map Seq.head
@@ -272,14 +284,15 @@ module CompletionDescription =
             // If they indeed want users to use it, why they set lots of imported fields to internal?
             match taggedText.Tag with
             // TODO: Support code block?
-            | "CodeBlockStart"   -> "`` " + taggedText.Text
-            | "CodeBlockEnd"     -> " ``" + taggedText.Text
+            | "CodeBlockStart" -> "`` " + taggedText.Text
+            | "CodeBlockEnd" -> " ``" + taggedText.Text
             | TextTags.LineBreak -> "\n\n"
-            | _                  -> taggedText.Text)
+            | _ -> taggedText.Text)
         |> String.concat ""
 
     let toDocumentation (description: CompletionDescription) : MarkupContent =
-        { Kind = MarkupKind.Markdown; Value = toMarkdownString description }
+        { Kind = MarkupKind.Markdown
+          Value = toMarkdownString description }
 
 
 module Documentation =

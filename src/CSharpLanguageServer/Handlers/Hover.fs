@@ -20,8 +20,8 @@ module Hover =
 
     let provider (clientCapabilities: ClientCapabilities) : U2<bool, HoverOptions> option =
         match dynamicRegistration clientCapabilities with
-        | true -> Some (U2.C1 false)
-        | false -> Some (U2.C1 true)
+        | true -> Some(U2.C1 false)
+        | false -> Some(U2.C1 true)
 
     let registration (clientCapabilities: ClientCapabilities) : Registration option =
         match dynamicRegistration clientCapabilities with
@@ -29,8 +29,8 @@ module Hover =
         | true ->
             let registerOptions: HoverRegistrationOptions =
                 { DocumentSelector = Some defaultDocumentSelector
-                  WorkDoneProgress = None
-                }
+                  WorkDoneProgress = None }
+
             Some
                 { Id = Guid.NewGuid().ToString()
                   Method = "textDocument/hover"
@@ -39,13 +39,20 @@ module Hover =
     let handle (context: ServerRequestContext) (p: TextDocumentPositionParams) : AsyncLspResult<Hover option> = async {
         match! context.FindSymbol' p.TextDocument.Uri p.Position with
         | None -> return None |> success
-        | Some (symbol, doc) ->
+        | Some(symbol, doc) ->
             let! ct = Async.CancellationToken
             let! semanticModel = doc.GetSemanticModelAsync(ct) |> Async.AwaitTask
-            let content = DocumentationUtil.markdownDocForSymbolWithSignature symbol semanticModel
+
+            let content =
+                DocumentationUtil.markdownDocForSymbolWithSignature symbol semanticModel
+
             let hover =
-                { Contents = { Kind = MarkupKind.Markdown; Value = content } |> U3.C1
+                { Contents =
+                    { Kind = MarkupKind.Markdown
+                      Value = content }
+                    |> U3.C1
                   // TODO: Support range
                   Range = None }
+
             return hover |> Some |> success
     }

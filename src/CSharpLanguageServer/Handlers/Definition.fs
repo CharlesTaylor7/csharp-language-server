@@ -20,7 +20,7 @@ module Definition =
     let provider (clientCapabilities: ClientCapabilities) : U2<bool, DefinitionOptions> option =
         match dynamicRegistration clientCapabilities with
         | true -> None
-        | false -> Some (U2.C1 true)
+        | false -> Some(U2.C1 true)
 
     let registration (clientCapabilities: ClientCapabilities) : Registration option =
         match dynamicRegistration clientCapabilities with
@@ -29,6 +29,7 @@ module Definition =
             let registerOptions: DefinitionRegistrationOptions =
                 { DocumentSelector = Some defaultDocumentSelector
                   WorkDoneProgress = None }
+
             Some
                 { Id = Guid.NewGuid().ToString()
                   Method = "textDocument/definition"
@@ -37,12 +38,7 @@ module Definition =
     let handle (context: ServerRequestContext) (p: TextDocumentPositionParams) : AsyncLspResult<Declaration option> = async {
         match! context.FindSymbol' p.TextDocument.Uri p.Position with
         | None -> return None |> success
-        | Some (symbol, doc) ->
+        | Some(symbol, doc) ->
             let! locations = context.ResolveSymbolLocations symbol (Some doc.Project)
-            return
-                locations
-                |> Array.ofList
-                |> Declaration.C2
-                |> Some
-                |> success
+            return locations |> Array.ofList |> Declaration.C2 |> Some |> success
     }

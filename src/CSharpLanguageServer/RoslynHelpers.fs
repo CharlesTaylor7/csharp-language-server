@@ -26,8 +26,7 @@ open CSharpLanguageServer
 open CSharpLanguageServer.Conversions
 open CSharpLanguageServer.Logging
 
-type DocumentSymbolCollectorForMatchingSymbolName
-        (documentUri, sym: ISymbol) =
+type DocumentSymbolCollectorForMatchingSymbolName(documentUri, sym: ISymbol) =
     inherit CSharpSyntaxWalker(SyntaxWalkerDepth.Token)
 
     let mutable collectedLocations = []
@@ -36,8 +35,7 @@ type DocumentSymbolCollectorForMatchingSymbolName
     let collectIdentifier (identifier: SyntaxToken) exactMatch =
         let location: Types.Location =
             { Uri = documentUri
-              Range = identifier.GetLocation().GetLineSpan().Span
-                      |> Range.fromLinePositionSpan }
+              Range = identifier.GetLocation().GetLineSpan().Span |> Range.fromLinePositionSpan }
 
         if exactMatch then
             collectedLocations <- location :: collectedLocations
@@ -61,79 +59,84 @@ type DocumentSymbolCollectorForMatchingSymbolName
                         symMethod.Parameters.Length = nodeMethodDecl.ParameterList.Parameters.Count
 
                     collectIdentifier nodeMethodDecl.Identifier methodArityMatches
-        else
-            if node :? TypeDeclarationSyntax then
-                let typeDecl = node :?> TypeDeclarationSyntax
-                if typeDecl.Identifier.ValueText = sym.Name then
-                    collectIdentifier typeDecl.Identifier false
+        else if node :? TypeDeclarationSyntax then
+            let typeDecl = node :?> TypeDeclarationSyntax
 
-            else if node :? PropertyDeclarationSyntax then
-                let propertyDecl = node :?> PropertyDeclarationSyntax
-                if propertyDecl.Identifier.ValueText = sym.Name then
-                    collectIdentifier propertyDecl.Identifier false
+            if typeDecl.Identifier.ValueText = sym.Name then
+                collectIdentifier typeDecl.Identifier false
 
-            else if node :? EventDeclarationSyntax then
-                let eventDecl = node :?> EventDeclarationSyntax
-                if eventDecl.Identifier.ValueText = sym.Name then
-                    collectIdentifier eventDecl.Identifier false
+        else if node :? PropertyDeclarationSyntax then
+            let propertyDecl = node :?> PropertyDeclarationSyntax
 
-            // TODO: collect other type of syntax nodes too
+            if propertyDecl.Identifier.ValueText = sym.Name then
+                collectIdentifier propertyDecl.Identifier false
+
+        else if node :? EventDeclarationSyntax then
+            let eventDecl = node :?> EventDeclarationSyntax
+
+            if eventDecl.Identifier.ValueText = sym.Name then
+                collectIdentifier eventDecl.Identifier false
+
+        // TODO: collect other type of syntax nodes too
 
         base.Visit(node)
 
-type CleanCodeGenerationOptionsProviderInterceptor (_logMessage) =
+type CleanCodeGenerationOptionsProviderInterceptor(_logMessage) =
     interface IInterceptor with
         member __.Intercept(invocation: IInvocation) =
             match invocation.Method.Name with
-            "GetCleanCodeGenerationOptionsAsync" ->
+            | "GetCleanCodeGenerationOptionsAsync" ->
                 let workspacesAssembly = Assembly.Load("Microsoft.CodeAnalysis.Workspaces")
-                let cleanCodeGenOptionsType = workspacesAssembly.GetType("Microsoft.CodeAnalysis.CodeGeneration.CleanCodeGenerationOptions")
+
+                let cleanCodeGenOptionsType =
+                    workspacesAssembly.GetType("Microsoft.CodeAnalysis.CodeGeneration.CleanCodeGenerationOptions")
 
                 let methodGetDefault = cleanCodeGenOptionsType.GetMethod("GetDefault")
 
                 let argLanguageServices = invocation.Arguments[0]
-                let defaultCleanCodeGenOptions = methodGetDefault.Invoke(null, [| argLanguageServices |])
+
+                let defaultCleanCodeGenOptions =
+                    methodGetDefault.Invoke(null, [| argLanguageServices |])
 
                 let valueTaskType = typedefof<ValueTask<_>>
-                let valueTaskTypeForCleanCodeGenOptions = valueTaskType.MakeGenericType([| cleanCodeGenOptionsType |])
+
+                let valueTaskTypeForCleanCodeGenOptions =
+                    valueTaskType.MakeGenericType([| cleanCodeGenOptionsType |])
 
                 invocation.ReturnValue <-
                     Activator.CreateInstance(valueTaskTypeForCleanCodeGenOptions, defaultCleanCodeGenOptions)
 
-            | _ ->
-                NotImplementedException(string invocation.Method) |> raise
+            | _ -> NotImplementedException(string invocation.Method) |> raise
 
-type LegacyWorkspaceOptionServiceInterceptor (logMessage) =
+type LegacyWorkspaceOptionServiceInterceptor(logMessage) =
     interface IInterceptor with
         member __.Intercept(invocation: IInvocation) =
             //logMessage (sprintf "LegacyWorkspaceOptionServiceInterceptor: %s" (string invocation.Method))
 
             match invocation.Method.Name with
-            | "RegisterWorkspace" ->
-                ()
-            | "GetGenerateEqualsAndGetHashCodeFromMembersGenerateOperators" ->
-                invocation.ReturnValue <- box true
-            | "GetGenerateEqualsAndGetHashCodeFromMembersImplementIEquatable" ->
-                invocation.ReturnValue <- box true
-            | "GetGenerateConstructorFromMembersOptionsAddNullChecks" ->
-                invocation.ReturnValue <- box true
-            | "get_GenerateOverrides" ->
-                invocation.ReturnValue <- box true
+            | "RegisterWorkspace" -> ()
+            | "GetGenerateEqualsAndGetHashCodeFromMembersGenerateOperators" -> invocation.ReturnValue <- box true
+            | "GetGenerateEqualsAndGetHashCodeFromMembersImplementIEquatable" -> invocation.ReturnValue <- box true
+            | "GetGenerateConstructorFromMembersOptionsAddNullChecks" -> invocation.ReturnValue <- box true
+            | "get_GenerateOverrides" -> invocation.ReturnValue <- box true
             | "get_CleanCodeGenerationOptionsProvider" ->
                 let workspacesAssembly = Assembly.Load("Microsoft.CodeAnalysis.Workspaces")
-                let cleanCodeGenOptionsProvType = workspacesAssembly.GetType("Microsoft.CodeAnalysis.CodeGeneration.AbstractCleanCodeGenerationOptionsProvider")
+
+                let cleanCodeGenOptionsProvType =
+                    workspacesAssembly.GetType(
+                        "Microsoft.CodeAnalysis.CodeGeneration.AbstractCleanCodeGenerationOptionsProvider"
+                    )
 
                 let generator = ProxyGenerator()
                 let interceptor = CleanCodeGenerationOptionsProviderInterceptor(logMessage)
                 let proxy = generator.CreateClassProxy(cleanCodeGenOptionsProvType, interceptor)
                 invocation.ReturnValue <- proxy
 
-            | _ ->
-                NotImplementedException(string invocation.Method) |> raise
+            | _ -> NotImplementedException(string invocation.Method) |> raise
 
-type PickMembersServiceInterceptor (_logMessage) =
+type PickMembersServiceInterceptor(_logMessage) =
     interface IInterceptor with
-         member __.Intercept(invocation: IInvocation) =
+        member __.Intercept(invocation: IInvocation) =
 
             match invocation.Method.Name with
             | "PickMembers" ->
@@ -145,10 +148,9 @@ type PickMembersServiceInterceptor (_logMessage) =
                 invocation.ReturnValue <-
                     Activator.CreateInstance(pickMembersResultType, argMembers, argOptions, box true)
 
-            | _ ->
-                NotImplementedException(string invocation.Method) |> raise
+            | _ -> NotImplementedException(string invocation.Method) |> raise
 
-type ExtractClassOptionsServiceInterceptor (_logMessage) =
+type ExtractClassOptionsServiceInterceptor(_logMessage) =
     interface IInterceptor with
         member __.Intercept(invocation: IInvocation) =
 
@@ -159,16 +161,22 @@ type ExtractClassOptionsServiceInterceptor (_logMessage) =
                 let _argSelectedMembers = invocation.Arguments[2] :?> ImmutableArray<ISymbol>
 
                 let featuresAssembly = Assembly.Load("Microsoft.CodeAnalysis.Features")
-                let extractClassOptionsType = featuresAssembly.GetType("Microsoft.CodeAnalysis.ExtractClass.ExtractClassOptions")
+
+                let extractClassOptionsType =
+                    featuresAssembly.GetType("Microsoft.CodeAnalysis.ExtractClass.ExtractClassOptions")
 
                 let typeName = "Base" + argOriginalType.Name
                 let fileName = typeName + ".cs"
                 let sameFile = box true
 
                 let immArrayType = typeof<ImmutableArray>
-                let extractClassMemberAnalysisResultType = featuresAssembly.GetType("Microsoft.CodeAnalysis.ExtractClass.ExtractClassMemberAnalysisResult")
 
-                let resultListType = typedefof<List<_>>.MakeGenericType(extractClassMemberAnalysisResultType)
+                let extractClassMemberAnalysisResultType =
+                    featuresAssembly.GetType("Microsoft.CodeAnalysis.ExtractClass.ExtractClassMemberAnalysisResult")
+
+                let resultListType =
+                    typedefof<List<_>>.MakeGenericType(extractClassMemberAnalysisResultType)
+
                 let resultList = Activator.CreateInstance(resultListType)
 
                 let memberFilter (m: ISymbol) =
@@ -177,9 +185,7 @@ type ExtractClassOptionsServiceInterceptor (_logMessage) =
                     | :? IFieldSymbol as fs -> not fs.IsImplicitlyDeclared
                     | _ -> m.Kind = SymbolKind.Property || m.Kind = SymbolKind.Event
 
-                let selectedMembersToAdd =
-                    argOriginalType.GetMembers()
-                    |> Seq.filter memberFilter
+                let selectedMembersToAdd = argOriginalType.GetMembers() |> Seq.filter memberFilter
 
                 for memberToAdd in selectedMembersToAdd do
                     let memberAnalysisResult =
@@ -188,31 +194,38 @@ type ExtractClassOptionsServiceInterceptor (_logMessage) =
                     resultListType.GetMethod("Add").Invoke(resultList, [| memberAnalysisResult |])
                     |> ignore
 
-                let resultListAsArray =
-                    resultListType.GetMethod("ToArray").Invoke(resultList, null)
+                let resultListAsArray = resultListType.GetMethod("ToArray").Invoke(resultList, null)
 
                 let immArrayCreateFromArray =
                     immArrayType.GetMethods()
-                    |> Seq.filter (fun m -> m.GetParameters().Length = 1 && (m.GetParameters()[0]).ParameterType.IsArray)
+                    |> Seq.filter (fun m ->
+                        m.GetParameters().Length = 1 && (m.GetParameters()[0]).ParameterType.IsArray)
                     |> Seq.head
 
                 let emptyMemberAnalysisResults =
-                    immArrayCreateFromArray.MakeGenericMethod([| extractClassMemberAnalysisResultType |]).Invoke(null, [| resultListAsArray |])
+                    immArrayCreateFromArray
+                        .MakeGenericMethod([| extractClassMemberAnalysisResultType |])
+                        .Invoke(null, [| resultListAsArray |])
 
                 let extractClassOptionsValue =
                     Activator.CreateInstance(
-                        extractClassOptionsType, fileName, typeName, sameFile, emptyMemberAnalysisResults)
+                        extractClassOptionsType,
+                        fileName,
+                        typeName,
+                        sameFile,
+                        emptyMemberAnalysisResults
+                    )
 
                 let fromResultMethod = typeof<Task>.GetMethod("FromResult")
-                let typedFromResultMethod = fromResultMethod.MakeGenericMethod([| extractClassOptionsType |])
 
-                invocation.ReturnValue <-
-                    typedFromResultMethod.Invoke(null, [| extractClassOptionsValue |])
+                let typedFromResultMethod =
+                    fromResultMethod.MakeGenericMethod([| extractClassOptionsType |])
 
-            | _ ->
-                NotImplementedException(string invocation.Method) |> raise
+                invocation.ReturnValue <- typedFromResultMethod.Invoke(null, [| extractClassOptionsValue |])
 
-type ExtractInterfaceOptionsServiceInterceptor (logMessage) =
+            | _ -> NotImplementedException(string invocation.Method) |> raise
+
+type ExtractInterfaceOptionsServiceInterceptor(logMessage) =
     interface IInterceptor with
 
         member __.Intercept(invocation: IInvocation) =
@@ -229,16 +242,23 @@ type ExtractInterfaceOptionsServiceInterceptor (logMessage) =
                 let extractInterfaceOptionsResultType =
                     featuresAssembly.GetType("Microsoft.CodeAnalysis.ExtractInterface.ExtractInterfaceOptionsResult")
 
-                let locationEnumType = extractInterfaceOptionsResultType.GetNestedType("ExtractLocation")
+                let locationEnumType =
+                    extractInterfaceOptionsResultType.GetNestedType("ExtractLocation")
+
                 let location = Enum.Parse(locationEnumType, "NewFile") // or "SameFile"
 
                 let workspacesAssembly = Assembly.Load("Microsoft.CodeAnalysis.Workspaces")
-                let cleanCodeGenOptionsProvType = workspacesAssembly.GetType("Microsoft.CodeAnalysis.CodeGeneration.AbstractCleanCodeGenerationOptionsProvider")
+
+                let cleanCodeGenOptionsProvType =
+                    workspacesAssembly.GetType(
+                        "Microsoft.CodeAnalysis.CodeGeneration.AbstractCleanCodeGenerationOptionsProvider"
+                    )
 
                 let generator = ProxyGenerator()
                 let interceptor = CleanCodeGenerationOptionsProviderInterceptor(logMessage)
+
                 let cleanCodeGenerationOptionsProvider =
-                     generator.CreateClassProxy(cleanCodeGenOptionsProvType, interceptor)
+                    generator.CreateClassProxy(cleanCodeGenOptionsProvType, interceptor)
 
                 let extractInterfaceOptionsResultValue =
                     Activator.CreateInstance(
@@ -248,20 +268,21 @@ type ExtractInterfaceOptionsServiceInterceptor (logMessage) =
                         argDefaultInterfaceName,
                         fileName,
                         location,
-                        cleanCodeGenerationOptionsProvider)
+                        cleanCodeGenerationOptionsProvider
+                    )
 
                 let fromResultMethod = typeof<Task>.GetMethod("FromResult")
-                let typedFromResultMethod = fromResultMethod.MakeGenericMethod([| extractInterfaceOptionsResultType |])
 
-                invocation.ReturnValue <-
-                    typedFromResultMethod.Invoke(null, [| extractInterfaceOptionsResultValue |])
+                let typedFromResultMethod =
+                    fromResultMethod.MakeGenericMethod([| extractInterfaceOptionsResultType |])
 
-            | _ ->
-                NotImplementedException(string invocation.Method.Name) |> raise
+                invocation.ReturnValue <- typedFromResultMethod.Invoke(null, [| extractInterfaceOptionsResultValue |])
 
-type MoveStaticMembersOptionsServiceInterceptor (_logMessage) =
+            | _ -> NotImplementedException(string invocation.Method.Name) |> raise
+
+type MoveStaticMembersOptionsServiceInterceptor(_logMessage) =
     interface IInterceptor with
-       member __.Intercept(invocation: IInvocation) =
+        member __.Intercept(invocation: IInvocation) =
 
             match invocation.Method.Name with
             | "GetMoveMembersToTypeOptions" ->
@@ -270,7 +291,9 @@ type MoveStaticMembersOptionsServiceInterceptor (_logMessage) =
                 let argSelectedMembers = invocation.Arguments[2] :?> ImmutableArray<ISymbol>
 
                 let featuresAssembly = Assembly.Load("Microsoft.CodeAnalysis.Features")
-                let msmOptionsType = featuresAssembly.GetType("Microsoft.CodeAnalysis.MoveStaticMembers.MoveStaticMembersOptions")
+
+                let msmOptionsType =
+                    featuresAssembly.GetType("Microsoft.CodeAnalysis.MoveStaticMembers.MoveStaticMembersOptions")
 
                 let newStaticClassName = "NewStaticClass"
 
@@ -280,30 +303,35 @@ type MoveStaticMembersOptionsServiceInterceptor (_logMessage) =
                         newStaticClassName + ".cs",
                         newStaticClassName,
                         argSelectedMembers,
-                        false |> box)
+                        false |> box
+                    )
 
                 invocation.ReturnValue <- msmOptions
 
-            | _ ->
-                NotImplementedException(string invocation.Method) |> raise
+            | _ -> NotImplementedException(string invocation.Method) |> raise
 
-type RemoteHostClientProviderInterceptor (_logMessage) =
+type RemoteHostClientProviderInterceptor(_logMessage) =
     interface IInterceptor with
-       member __.Intercept(invocation: IInvocation) =
+        member __.Intercept(invocation: IInvocation) =
 
             match invocation.Method.Name with
             | "TryGetRemoteHostClientAsync" ->
                 let workspacesAssembly = Assembly.Load("Microsoft.CodeAnalysis.Workspaces")
-                let remoteHostClientType = workspacesAssembly.GetType("Microsoft.CodeAnalysis.Remote.RemoteHostClient")
-                let methodInfo = typeof<Task>.GetMethod("FromResult", BindingFlags.Static ||| BindingFlags.Public)
+
+                let remoteHostClientType =
+                    workspacesAssembly.GetType("Microsoft.CodeAnalysis.Remote.RemoteHostClient")
+
+                let methodInfo =
+                    typeof<Task>
+                        .GetMethod("FromResult", BindingFlags.Static ||| BindingFlags.Public)
+
                 let genericMethod = methodInfo.MakeGenericMethod(remoteHostClientType)
                 let nullResultTask = genericMethod.Invoke(null, [| null |])
                 invocation.ReturnValue <- nullResultTask
 
-            | _ ->
-                NotImplementedException(string invocation.Method) |> raise
+            | _ -> NotImplementedException(string invocation.Method) |> raise
 
-type WorkspaceServicesInterceptor () =
+type WorkspaceServicesInterceptor() =
     let logger = LogProvider.getLoggerByName "WorkspaceServicesInterceptor"
 
     interface IInterceptor with
@@ -351,38 +379,41 @@ type WorkspaceServicesInterceptor () =
                             Log.setMessage "GetService failed for {serviceType}"
                             >> Log.addContext "serviceType" (serviceType.FullName)
                         )
+
                         null
 
                 invocation.ReturnValue <- updatedReturnValue
 
-type CSharpLspHostServices () =
+type CSharpLspHostServices() =
     inherit HostServices()
 
     member private this.hostServices = MSBuildMefHostServices.DefaultServices
 
-    override this.CreateWorkspaceServices (workspace: Workspace) =
+    override this.CreateWorkspaceServices(workspace: Workspace) =
         // Ugly but we can't:
         // 1. use Castle since there is no default constructor of MefHostServices.
         // 2. call this.hostServices.CreateWorkspaceServices directly since it's internal.
-        let methodInfo = this.hostServices.GetType().GetMethod("CreateWorkspaceServices", BindingFlags.Instance|||BindingFlags.NonPublic)
+        let methodInfo =
+            this.hostServices
+                .GetType()
+                .GetMethod("CreateWorkspaceServices", BindingFlags.Instance ||| BindingFlags.NonPublic)
+
         let services =
             methodInfo.Invoke(this.hostServices, [| workspace |])
             |> Unchecked.unbox<HostWorkspaceServices>
+
         let generator = ProxyGenerator()
         let interceptor = WorkspaceServicesInterceptor()
         generator.CreateClassProxyWithTarget(services, interceptor)
 
-let tryLoadSolutionOnPath
-        (lspClient: ILspClient)
-        (logger: ILog)
-        solutionPath =
+let tryLoadSolutionOnPath (lspClient: ILspClient) (logger: ILog) solutionPath =
     let progress = ProgressReporter(lspClient)
 
     let showMessage m =
-        lspClient.WindowShowMessage({
-            Type = MessageType.Info
-            Message = sprintf "csharp-ls: %s" m
-        })
+        lspClient.WindowShowMessage(
+            { Type = MessageType.Info
+              Message = sprintf "csharp-ls: %s" m }
+        )
 
     async {
         try
@@ -408,19 +439,21 @@ let tryLoadSolutionOnPath
             do! showMessage endMessage
 
             return Some solution
-        with
-        | ex ->
-            let errorMessage = sprintf "Solution \"%s\" could not be loaded: %s" solutionPath (ex.ToString())
+        with ex ->
+            let errorMessage =
+                sprintf "Solution \"%s\" could not be loaded: %s" solutionPath (ex.ToString())
+
             do! progress.End errorMessage
             do! showMessage errorMessage
             return None
     }
 
 let tryLoadSolutionFromProjectFiles
-        (lspClient: ILspClient)
-        (logger: ILog)
-        (showMessage: string -> Async<unit>)
-        (projs: string list) =
+    (lspClient: ILspClient)
+    (logger: ILog)
+    (showMessage: string -> Async<unit>)
+    (projs: string list)
+    =
     let progress = ProgressReporter(lspClient)
 
     async {
@@ -429,9 +462,11 @@ let tryLoadSolutionFromProjectFiles
 
         let msbuildWorkspace = MSBuildWorkspace.Create(CSharpLspHostServices())
         msbuildWorkspace.LoadMetadataForReferencedProjects <- true
+
         for file in projs do
             if projs.Length < 10 then
-              do! showMessage (sprintf "loading project \"%s\".." file)
+                do! showMessage (sprintf "loading project \"%s\".." file)
+
             try
                 do! msbuildWorkspace.OpenProjectAsync(file) |> Async.AwaitTask |> Async.Ignore
             with ex ->
@@ -440,6 +475,7 @@ let tryLoadSolutionFromProjectFiles
                     >> Log.addContext "file" file
                     >> Log.addContext "ex" (string ex)
                 )
+
             let projectFile = new FileInfo(file)
             let projName = projectFile.Name
             let loaded = Interlocked.Increment(loadedProj)
@@ -452,110 +488,95 @@ let tryLoadSolutionFromProjectFiles
                 >> Log.addContext "message" (diag.ToString())
             )
 
-        do! progress.End (sprintf "OK, %d project file(s) loaded" projs.Length)
+        do! progress.End(sprintf "OK, %d project file(s) loaded" projs.Length)
 
         //workspace <- Some(msbuildWorkspace :> Workspace)
         return Some msbuildWorkspace.CurrentSolution
     }
 
-let findAndLoadSolutionOnDir
-        (lspClient: ILspClient)
-        (logger: ILog)
-        dir =
-    async {
-        let fileNotOnNodeModules (filename: string) =
-            filename.Split(Path.DirectorySeparatorChar)
-            |> Seq.contains "node_modules"
-            |> not
+let findAndLoadSolutionOnDir (lspClient: ILspClient) (logger: ILog) dir = async {
+    let fileNotOnNodeModules (filename: string) =
+        filename.Split(Path.DirectorySeparatorChar)
+        |> Seq.contains "node_modules"
+        |> not
 
-        let solutionFiles =
-            Directory.GetFiles(dir, "*.sln", SearchOption.AllDirectories)
+    let solutionFiles =
+        Directory.GetFiles(dir, "*.sln", SearchOption.AllDirectories)
+        |> Seq.filter fileNotOnNodeModules
+        |> Seq.toList
+
+    let showMessage m =
+        lspClient.WindowShowMessage(
+            { Type = MessageType.Info
+              Message = sprintf "csharp-ls: %s" m }
+        )
+
+    do! showMessage (sprintf "%d solution(s) found: [%s]" solutionFiles.Length (String.Join(", ", solutionFiles)))
+
+    let singleSolutionFound =
+        match solutionFiles with
+        | [ x ] -> Some x
+        | _ -> None
+
+    match singleSolutionFound with
+    | None ->
+        do! showMessage ("no or multiple .sln files found on " + dir)
+        do! showMessage ("looking for .csproj/fsproj files on " + dir + "..")
+
+        let projFiles =
+            let csprojFiles = Directory.GetFiles(dir, "*.csproj", SearchOption.AllDirectories)
+            let fsprojFiles = Directory.GetFiles(dir, "*.fsproj", SearchOption.AllDirectories)
+
+            [ csprojFiles; fsprojFiles ]
+            |> Seq.concat
             |> Seq.filter fileNotOnNodeModules
             |> Seq.toList
 
-        let showMessage m =
-            lspClient.WindowShowMessage({
-                Type = MessageType.Info
-                Message = sprintf "csharp-ls: %s" m
-            })
+        if projFiles.Length = 0 then
+            let message = "no or .csproj/.fsproj or sln files found on " + dir
+            do! showMessage message
+            Exception message |> raise
 
-        do! showMessage (sprintf "%d solution(s) found: [%s]" solutionFiles.Length (String.Join(", ", solutionFiles)) )
+        return! tryLoadSolutionFromProjectFiles lspClient logger showMessage projFiles
 
-        let singleSolutionFound =
-            match solutionFiles with
-            | [x] -> Some x
-            | _ -> None
+    | Some solutionPath -> return! tryLoadSolutionOnPath lspClient logger solutionPath
+}
 
-        match singleSolutionFound with
-        | None ->
-            do! showMessage ("no or multiple .sln files found on " + dir)
-            do! showMessage ("looking for .csproj/fsproj files on " + dir + "..")
-
-            let projFiles =
-                let csprojFiles = Directory.GetFiles(dir, "*.csproj", SearchOption.AllDirectories)
-                let fsprojFiles = Directory.GetFiles(dir, "*.fsproj", SearchOption.AllDirectories)
-
-                [ csprojFiles; fsprojFiles ] |> Seq.concat
-                                                |> Seq.filter fileNotOnNodeModules
-                                                |> Seq.toList
-
-            if projFiles.Length = 0 then
-                let message = "no or .csproj/.fsproj or sln files found on " + dir
-                do! showMessage message
-                Exception message |> raise
-
-            return! tryLoadSolutionFromProjectFiles lspClient logger showMessage projFiles
-
-        | Some solutionPath ->
-            return! tryLoadSolutionOnPath lspClient logger solutionPath
-    }
-
-let loadSolutionOnSolutionPathOrDir
-        (lspClient: ILspClient)
-        (logger: ILog)
-        solutionPathMaybe
-        rootPath =
+let loadSolutionOnSolutionPathOrDir (lspClient: ILspClient) (logger: ILog) solutionPathMaybe rootPath =
     match solutionPathMaybe with
-    | Some solutionPath -> async {
-        return! tryLoadSolutionOnPath lspClient logger solutionPath
-      }
+    | Some solutionPath -> async { return! tryLoadSolutionOnPath lspClient logger solutionPath }
 
     | None -> async {
-        let logMessage: ShowMessageParams = {
-            Type = MessageType.Info
-            Message = sprintf "csharp-ls: attempting to find and load solution based on root path (\"%s\").." rootPath
-        }
+        let logMessage: ShowMessageParams =
+            { Type = MessageType.Info
+              Message = sprintf "csharp-ls: attempting to find and load solution based on root path (\"%s\").." rootPath }
 
         do! lspClient.WindowShowMessage(logMessage)
         return! findAndLoadSolutionOnDir lspClient logger rootPath
       }
 
-let getContainingTypeOrThis (symbol: ISymbol): INamedTypeSymbol =
+let getContainingTypeOrThis (symbol: ISymbol) : INamedTypeSymbol =
     if (symbol :? INamedTypeSymbol) then
         symbol :?> INamedTypeSymbol
     else
         symbol.ContainingType
 
 let getFullReflectionName (containingType: INamedTypeSymbol) =
-    let stack = Stack<string>();
-    stack.Push(containingType.MetadataName);
-    let mutable ns = containingType.ContainingNamespace;
+    let stack = Stack<string>()
+    stack.Push(containingType.MetadataName)
+    let mutable ns = containingType.ContainingNamespace
 
     let mutable doContinue = true
+
     while doContinue do
-        stack.Push(ns.Name);
+        stack.Push(ns.Name)
         ns <- ns.ContainingNamespace
 
         doContinue <- ns <> null && not ns.IsGlobalNamespace
 
     String.Join(".", stack)
 
-let tryAddDocument (logger: ILog)
-                   (docFilePath: string)
-                   (text: string)
-                   (solution: Solution)
-                   : Async<Document option> =
-  async {
+let tryAddDocument (logger: ILog) (docFilePath: string) (text: string) (solution: Solution) : Async<Document option> = async {
     let docDir = Path.GetDirectoryName(docFilePath)
     //logMessage (sprintf "TextDocumentDidOpen: docFilename=%s docDir=%s" docFilename docDir)
 
@@ -565,20 +586,19 @@ let tryAddDocument (logger: ILog)
 
         (docDir = projectDir) || docDir.StartsWith(projectDirWithDirSepChar)
 
-    let projectOnPath =
-        solution.Projects
-        |> Seq.filter fileOnProjectDir
-        |> Seq.tryHead
+    let projectOnPath = solution.Projects |> Seq.filter fileOnProjectDir |> Seq.tryHead
 
     let! newDocumentMaybe =
         match projectOnPath with
         | Some proj ->
             let projectBaseDir = Path.GetDirectoryName(proj.FilePath)
-            let docName = docFilePath.Substring(projectBaseDir.Length+1)
+            let docName = docFilePath.Substring(projectBaseDir.Length + 1)
 
             //logMessage (sprintf "Adding \"%s\" (\"%s\") to project %s" docName docFilePath proj.FilePath)
 
-            let newDoc = proj.AddDocument(name=docName, text=SourceText.From(text), folders=null, filePath=docFilePath)
+            let newDoc =
+                proj.AddDocument(name = docName, text = SourceText.From(text), folders = null, filePath = docFilePath)
+
             Some newDoc |> async.Return
 
         | None -> async {
@@ -586,21 +606,28 @@ let tryAddDocument (logger: ILog)
                 Log.setMessage "No parent project could be resolved to add file \"{file}\" to workspace"
                 >> Log.addContext "file" docFilePath
             )
+
             return None
           }
 
     return newDocumentMaybe
-  }
+}
 
 let makeDocumentFromMetadata
-        (compilation: Microsoft.CodeAnalysis.Compilation)
-        (project: Microsoft.CodeAnalysis.Project)
-        (l: Microsoft.CodeAnalysis.Location)
-        (fullName: string) =
+    (compilation: Microsoft.CodeAnalysis.Compilation)
+    (project: Microsoft.CodeAnalysis.Project)
+    (l: Microsoft.CodeAnalysis.Location)
+    (fullName: string)
+    =
     let mdLocation = l
-    let reference = compilation.GetMetadataReference(mdLocation.MetadataModule.ContainingAssembly)
+
+    let reference =
+        compilation.GetMetadataReference(mdLocation.MetadataModule.ContainingAssembly)
+
     let peReference = reference :?> PortableExecutableReference |> Option.ofObj
-    let assemblyLocation = peReference |> Option.map (fun r -> r.FilePath) |> Option.defaultValue "???"
+
+    let assemblyLocation =
+        peReference |> Option.map (fun r -> r.FilePath) |> Option.defaultValue "???"
 
     let decompilerSettings = DecompilerSettings()
     decompilerSettings.ThrowOnAssemblyResolveErrors <- false // this shouldn't be a showstopper for us
@@ -615,9 +642,10 @@ let makeDocumentFromMetadata
 
     let text = decompiler.DecompileTypeAsString(fullTypeName)
 
-    let mdDocumentFilename = $"$metadata$/projects/{project.Name}/assemblies/{mdLocation.MetadataModule.ContainingAssembly.Name}/symbols/{fullName}.cs"
+    let mdDocumentFilename =
+        $"$metadata$/projects/{project.Name}/assemblies/{mdLocation.MetadataModule.ContainingAssembly.Name}/symbols/{fullName}.cs"
+
     let mdDocumentEmpty = project.AddDocument(mdDocumentFilename, String.Empty)
 
     let mdDocument = SourceText.From(text) |> mdDocumentEmpty.WithText
     (mdDocument, text)
-

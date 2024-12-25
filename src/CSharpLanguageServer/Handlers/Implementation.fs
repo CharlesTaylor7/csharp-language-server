@@ -18,10 +18,12 @@ module Implementation =
         |> Option.bind (fun x -> x.DynamicRegistration)
         |> Option.defaultValue false
 
-    let provider (clientCapabilities: ClientCapabilities) : U3<bool,ImplementationOptions,ImplementationRegistrationOptions> option =
+    let provider
+        (clientCapabilities: ClientCapabilities)
+        : U3<bool, ImplementationOptions, ImplementationRegistrationOptions> option =
         match dynamicRegistration clientCapabilities with
         | true -> None
-        | false -> Some (U3.C1 true)
+        | false -> Some(U3.C1 true)
 
     let registration (clientCapabilities: ClientCapabilities) : Registration option =
         match dynamicRegistration clientCapabilities with
@@ -44,10 +46,5 @@ module Implementation =
             let! impls = context.FindImplementations symbol
             let! locations = impls |> Seq.map (flip context.ResolveSymbolLocations None) |> Async.Parallel
 
-            return
-                locations
-                |> Array.collect List.toArray
-                |> Declaration.C2
-                |> Some
-                |> success
+            return locations |> Array.collect List.toArray |> Declaration.C2 |> Some |> success
     }

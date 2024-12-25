@@ -6,7 +6,7 @@ open CSharpLanguageServer.State
 
 [<RequireQualifiedAccess>]
 module Color =
-    let provider (clientCapabilities: ClientCapabilities)  = None
+    let provider (clientCapabilities: ClientCapabilities) = None
 
     let registration (clientCapabilities: ClientCapabilities) : Registration option = None
 
