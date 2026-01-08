@@ -107,6 +107,7 @@ let loadProjectTfms (projs: string seq) : Map<string, list<string>> =
             projectTfms <- projectTfms |> Map.add projectFilename (targetFramework @ targetFrameworks)
 
             projectCollection.UnloadProject buildProject
+
         with :? InvalidProjectFileException as ipfe ->
             logger.LogDebug(
                 "loadProjectTfms: failed to load {projectFilename}: {ex}",
