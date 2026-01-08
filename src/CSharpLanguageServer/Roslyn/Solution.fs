@@ -25,7 +25,7 @@ let private logger = Logging.getLoggerByName "Roslyn.Solution"
 
 let initializeMSBuild () : unit =
     let vsInstanceQueryOpt = VisualStudioInstanceQueryOptions.Default
-    let vsInstanceList = MSBuildLocator.QueryVisualStudioInstances(vsInstanceQueryOpt)
+    let vsInstanceList = MSBuildLocator.QueryVisualStudioInstances vsInstanceQueryOpt
 
     if Seq.isEmpty vsInstanceList then
         raise (
@@ -53,17 +53,17 @@ let initializeMSBuild () : unit =
                     (string vsInstance.DiscoveryType))
         )
 
-    logger.LogInformation(sdkInstanceInfo)
+    logger.LogInformation sdkInstanceInfo
 
     let vsInstance = vsInstanceList |> Seq.head
 
     logger.LogInformation(
         "MSBuildLocator: will register \"{vsInstanceName}\", Version={vsInstanceVersion} as default instance",
         vsInstance.Name,
-        (string vsInstance.Version)
+        string vsInstance.Version
     )
 
-    MSBuildLocator.RegisterInstance(vsInstance)
+    MSBuildLocator.RegisterInstance vsInstance
 
 let solutionLoadProjectFilenames (solutionPath: string) =
     assert Path.IsPathRooted solutionPath
