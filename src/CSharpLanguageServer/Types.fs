@@ -10,7 +10,8 @@ type ServerSettings =
       LogLevel: LogLevel
       ApplyFormattingOptions: bool
       UseMetadataUris: bool
-      DebugMode: bool }
+      DebugMode: bool
+      TargetFrameworkMoniker: string option }
 
     member this.GetEffectiveFormattingOptions options =
         if this.ApplyFormattingOptions then Some options else None
@@ -20,22 +21,34 @@ type ServerSettings =
           LogLevel = LogLevel.Information
           ApplyFormattingOptions = false
           UseMetadataUris = false
-          DebugMode = false }
+          DebugMode = false
+          TargetFrameworkMoniker = None }
 
 type CSharpSectionConfiguration =
     { solution: string option
-      applyFormattingOptions: bool option }
+      applyFormattingOptions: bool option
+      targetFrameworkMoniker: string option }
 
     static member Default =
         { solution = None
-          applyFormattingOptions = None }
+          applyFormattingOptions = None
+          targetFrameworkMoniker = None
+        }
 
 let applyCSharpSectionConfigurationOnSettings oldSettings csharpSectionConfig =
     { oldSettings with
-        SolutionPath = csharpSectionConfig.solution |> Option.orElse oldSettings.SolutionPath
+        SolutionPath =
+            csharpSectionConfig.solution
+            |> Option.orElse oldSettings.SolutionPath
+
         ApplyFormattingOptions =
             csharpSectionConfig.applyFormattingOptions
-            |> Option.defaultValue oldSettings.ApplyFormattingOptions }
+            |> Option.defaultValue oldSettings.ApplyFormattingOptions
+
+        TargetFrameworkMoniker =
+            csharpSectionConfig.targetFrameworkMoniker
+            |> Option.orElse oldSettings.TargetFrameworkMoniker
+    }
 
 type DidChangeConfigurationSettingsDto =
     { csharp: CSharpSectionConfiguration option }

@@ -383,7 +383,12 @@ let workspaceWithSolutionsLoaded (settings: ServerSettings) (lspClient: ILspClie
         let wfRootDir = wf.Uri |> workspaceFolderUriToPath wf
 
         let! newSolution =
-            solutionLoadSolutionWithPathOrOnDir lspClient progressReporter settings.SolutionPath wfRootDir.Value
+            solutionLoadSolutionWithPathOrOnDir
+                settings
+                lspClient
+                progressReporter
+                settings.SolutionPath
+                wfRootDir.Value
 
         let updatedWf = { wf with Solution = newSolution }
         updatedWorkspace <- updatedWf |> workspaceWithFolder updatedWorkspace

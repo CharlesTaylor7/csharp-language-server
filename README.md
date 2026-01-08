@@ -38,6 +38,8 @@ Once installed, your editor's LSP client should automatically detect and start
 - `csharp.applyFormattingOptions` - use formatting options as supplied by the
   client (may override `.editorconfig` values), defaults to `false`
 
+- `csharp.targetFrameworkMoniker` - override the target framework used for the workspace.
+
 ## Command Line Arguments
 
 ```

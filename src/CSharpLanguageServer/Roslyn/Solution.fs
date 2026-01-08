@@ -19,6 +19,7 @@ open NuGet.Frameworks
 open CSharpLanguageServer.Lsp
 open CSharpLanguageServer.Logging
 open CSharpLanguageServer.Roslyn.WorkspaceServices
+open CSharpLanguageServer.Types
 
 let private logger = Logging.getLoggerByName "Roslyn.Solution"
 
@@ -218,7 +219,7 @@ let selectPreferredSolution (slnFiles: string list) : option<string> =
         |> Seq.map snd
         |> Seq.tryHead
 
-let solutionTryLoadOnPath (lspClient: ILspClient) (solutionPath: string) =
+let solutionTryLoadOnPath (settings: ServerSettings) (lspClient: ILspClient) (solutionPath: string) =
     assert Path.IsPathRooted solutionPath
 
     let logMessage m =
@@ -235,11 +236,14 @@ let solutionTryLoadOnPath (lspClient: ILspClient) (solutionPath: string) =
         try
             do! logMessage (sprintf "Loading solution \"%s\"..." solutionPath)
 
-            let projs = solutionLoadProjectFilenames solutionPath
+            let tfm =
+                settings.TargetFrameworkMoniker
+                |> Option.orElseWith (fun () ->
+                    solutionLoadProjectFilenames solutionPath
+                    |> loadProjectTfms
+                    |> workspaceTargetFramework)
 
-            let tfmsPerProject = loadProjectTfms projs
-            let tfmToUse = workspaceTargetFramework tfmsPerProject
-            let workspaceProps = resolveDefaultWorkspaceProps tfmToUse
+            let workspaceProps = resolveDefaultWorkspaceProps tfm
             logger.LogInformation("Will use MSBuild props: {workspaceProps}", string workspaceProps)
 
             let msbuildWorkspace =
@@ -266,6 +270,7 @@ let solutionTryLoadOnPath (lspClient: ILspClient) (solutionPath: string) =
     }
 
 let solutionTryLoadFromProjectFiles
+    (settings: ServerSettings)
     (lspClient: ILspClient)
     (logMessage: string -> Async<unit>)
     (progressReport: string * uint -> Async<unit>)
@@ -275,9 +280,16 @@ let solutionTryLoadFromProjectFiles
         do! progressReport ($"Loading {projs.Length} project(s)...", 0u)
         let loadedProj = ref 0
 
-        let tfmsPerProject = loadProjectTfms projs
-        let tmfToUse = workspaceTargetFramework tfmsPerProject
-        let workspaceProps = resolveDefaultWorkspaceProps tmfToUse
+        // let tfmsPerProject = loadProjectTfms projs
+        // let tmfToUse = workspaceTargetFramework tfmsPerProject
+        // let workspaceProps = resolveDefaultWorkspaceProps tmfToUse
+
+        let tfm =
+            settings.TargetFrameworkMoniker
+            |> Option.orElseWith (fun () -> projs |> loadProjectTfms |> workspaceTargetFramework)
+
+        let workspaceProps = resolveDefaultWorkspaceProps tfm
+
         logger.LogInformation("Will use MSBuild props: {workspaceProps}", string workspaceProps)
 
         let msbuildWorkspace =
@@ -307,59 +319,66 @@ let solutionTryLoadFromProjectFiles
         return Some msbuildWorkspace.CurrentSolution
     }
 
-let solutionFindAndLoadOnDir (progressReporter: ProgressReporter) (lspClient: ILspClient) dir = async {
-    let fileNotOnNodeModules (filename: string) =
-        filename.Split Path.DirectorySeparatorChar |> Seq.contains "node_modules" |> not
+let solutionFindAndLoadOnDir
+    (settings: ServerSettings)
+    (progressReporter: ProgressReporter)
+    (lspClient: ILspClient)
+    (dir: string)
+    =
+    async {
+        let fileNotOnNodeModules (filename: string) =
+            filename.Split Path.DirectorySeparatorChar |> Seq.contains "node_modules" |> not
 
-    let solutionFiles =
-        [ "*.sln"; "*.slnx" ]
-        |> List.collect (fun p -> Directory.GetFiles(dir, p, SearchOption.AllDirectories) |> List.ofArray)
-        |> Seq.filter fileNotOnNodeModules
-        |> Seq.toList
-
-    let logMessage m =
-        lspClient.WindowLogMessage
-            { Type = MessageType.Info
-              Message = sprintf "csharp-ls: %s" m }
-
-    do! logMessage (sprintf "%d solution(s) found: [%s]" solutionFiles.Length (String.Join(", ", solutionFiles)))
-
-    let preferredSlnFile = solutionFiles |> selectPreferredSolution
-
-    match preferredSlnFile with
-    | None ->
-        do!
-            logMessage (
-                "no single preferred .sln/.slnx file found on "
-                + dir
-                + "; fill load project files manually"
-            )
-
-        do! logMessage ("looking for .csproj/fsproj files on " + dir + "..")
-
-        let projFiles =
-            let csprojFiles = Directory.GetFiles(dir, "*.csproj", SearchOption.AllDirectories)
-            let fsprojFiles = Directory.GetFiles(dir, "*.fsproj", SearchOption.AllDirectories)
-
-            [ csprojFiles; fsprojFiles ]
-            |> Seq.concat
+        let solutionFiles =
+            [ "*.sln"; "*.slnx" ]
+            |> List.collect (fun p -> Directory.GetFiles(dir, p, SearchOption.AllDirectories) |> List.ofArray)
             |> Seq.filter fileNotOnNodeModules
             |> Seq.toList
 
-        if projFiles.Length = 0 then
-            let message = "no or .csproj/.fsproj or sln files found on " + dir
-            do! logMessage message
-            Exception message |> raise
+        let logMessage m =
+            lspClient.WindowLogMessage
+                { Type = MessageType.Info
+                  Message = sprintf "csharp-ls: %s" m }
 
-        let progressReport (message, percent) =
-            progressReporter.Report(false, message, percent)
+        do! logMessage (sprintf "%d solution(s) found: [%s]" solutionFiles.Length (String.Join(", ", solutionFiles)))
 
-        return! solutionTryLoadFromProjectFiles lspClient logMessage progressReport projFiles
+        let preferredSlnFile = solutionFiles |> selectPreferredSolution
 
-    | Some solutionPath -> return! solutionTryLoadOnPath lspClient solutionPath
-}
+        match preferredSlnFile with
+        | None ->
+            do!
+                logMessage (
+                    "no single preferred .sln/.slnx file found on "
+                    + dir
+                    + "; fill load project files manually"
+                )
+
+            do! logMessage ("looking for .csproj/fsproj files on " + dir + "..")
+
+            let projFiles =
+                let csprojFiles = Directory.GetFiles(dir, "*.csproj", SearchOption.AllDirectories)
+                let fsprojFiles = Directory.GetFiles(dir, "*.fsproj", SearchOption.AllDirectories)
+
+                [ csprojFiles; fsprojFiles ]
+                |> Seq.concat
+                |> Seq.filter fileNotOnNodeModules
+                |> Seq.toList
+
+            if projFiles.Length = 0 then
+                let message = "no or .csproj/.fsproj or sln files found on " + dir
+                do! logMessage message
+                Exception message |> raise
+
+            let progressReport (message, percent) =
+                progressReporter.Report(false, message, percent)
+
+            return! solutionTryLoadFromProjectFiles settings lspClient logMessage progressReport projFiles
+
+        | Some solutionPath -> return! solutionTryLoadOnPath settings lspClient solutionPath
+    }
 
 let solutionLoadSolutionWithPathOrOnDir
+    (settings: ServerSettings)
     (lspClient: ILspClient)
     (progressReporter: ProgressReporter)
     (solutionPathMaybe: string option)
@@ -372,7 +391,7 @@ let solutionLoadSolutionWithPathOrOnDir
             | true -> solutionPath
             | false -> Path.Combine(dir, solutionPath)
 
-        return! solutionTryLoadOnPath lspClient rootedSolutionPath
+        return! solutionTryLoadOnPath settings lspClient rootedSolutionPath
       }
 
     | None -> async {
@@ -382,5 +401,5 @@ let solutionLoadSolutionWithPathOrOnDir
 
         do! lspClient.WindowLogMessage logMessage
 
-        return! solutionFindAndLoadOnDir progressReporter lspClient dir
+        return! solutionFindAndLoadOnDir settings progressReporter lspClient dir
       }
