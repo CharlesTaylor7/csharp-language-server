@@ -279,6 +279,7 @@ module Completion =
             |> Option.bind completionItemMemoryCacheGet
 
         match roslynDocAndItemMaybe with
+        | None -> return item |> LspResult.success
         | Some(doc, roslynCompletionItem) ->
             let completionService =
                 Microsoft.CodeAnalysis.Completion.CompletionService.GetService(doc)
@@ -303,11 +304,20 @@ module Completion =
                       Value = d }
                     |> U2.C2)
 
-            return
-                { item with
-                    Detail = synopsis
-                    Documentation = updatedItemDocumentation }
-                |> LspResult.success
+            // this dummy code works
+            // - [ ] only for class completions
+            // - [ ] split the qualifier from the completion item
 
-        | None -> return item |> LspResult.success
+            return
+                LspResult.success
+                    { item with
+                        Documentation = updatedItemDocumentation
+                        Detail = synopsis
+                        AdditionalTextEdits =
+                            Some
+                                [| { NewText = "using FooBar;\n"
+                                     Range =
+
+                                       { Start = { Line = 0u; Character = 0u }
+                                         End = { Line = 0u; Character = 0u } } } |] }
     }
