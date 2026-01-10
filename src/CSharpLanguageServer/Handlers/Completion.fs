@@ -297,27 +297,32 @@ module Completion =
                 |> Option.map parseAndFormatDocumentation
                 |> Option.defaultValue (None, None)
 
-            let updatedItemDocumentation =
-                documentation
-                |> Option.map (fun d ->
-                    { Kind = MarkupKind.PlainText
-                      Value = d }
-                    |> U2.C2)
 
             // this dummy code works
-            // - [ ] only for class completions
             // - [ ] split the qualifier from the completion item
 
             return
                 LspResult.success
                     { item with
-                        Documentation = updatedItemDocumentation
+                        Documentation =
+                            documentation
+                            |> Option.map (fun d ->
+                                { Kind = MarkupKind.PlainText
+                                  Value = d }
+                                |> U2.C2)
+
                         Detail = synopsis
                         AdditionalTextEdits =
-                            Some
-                                [| { NewText = "using FooBar;\n"
-                                     Range =
+                            if item.Kind = Some CompletionItemKind.Class then
+                                Some
+                                    [| { NewText = "using FooBar;\n"
 
-                                       { Start = { Line = 0u; Character = 0u }
-                                         End = { Line = 0u; Character = 0u } } } |] }
+                                         Range =
+
+                                           { Start = { Line = 0u; Character = 0u }
+                                             End = { Line = 0u; Character = 0u } } } |]
+
+
+                            else
+                                None }
     }
